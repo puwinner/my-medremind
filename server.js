@@ -130,9 +130,50 @@ function syncLocalProfiles(profiles) {
   } catch (e) {}
 }
 
+function normalizeApptDate(val) {
+  if (!val) return '';
+  val = String(val).trim();
+  const match = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const y = match[1];
+    const m = match[2].padStart(2, '0');
+    const d = match[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const dt = new Date(val);
+  if (!isNaN(dt.getTime())) {
+    const tzOffset = 7 * 60 * 60 * 1000;
+    const thaiTime = new Date(dt.getTime() + tzOffset);
+    const y = thaiTime.getUTCFullYear();
+    const m = String(thaiTime.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(thaiTime.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return val;
+}
+
+function normalizeApptTime(val) {
+  if (!val) return '09:00';
+  val = String(val).trim();
+  if (/^\d{1,2}:\d{2}$/.test(val)) return val.padStart(5, '0');
+  if (/^\d{1,2}:\d{2}:\d{2}$/.test(val)) return val.substring(0, 5);
+  if (val.includes('T')) {
+    const dt = new Date(val);
+    if (!isNaN(dt.getTime())) {
+      const totalSec = dt.getUTCHours() * 3600 + dt.getUTCMinutes() * 60 + dt.getUTCSeconds() + (6 * 3600 + 42 * 60 + 4);
+      const h = Math.floor((totalSec / 3600) % 24);
+      const m = Math.round((totalSec % 3600) / 60);
+      return `${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    }
+  }
+  return val;
+}
+
 function syncLocalAppointments(appts) {
   try {
     for (const a of appts) {
+      const normDate = normalizeApptDate(a.appointment_date);
+      const normTime = normalizeApptTime(a.appointment_time);
       db.prepare(`
         INSERT INTO appointments (
           id, profile_id, title, doctor_name, hospital, department,
@@ -148,7 +189,7 @@ function syncLocalAppointments(appts) {
           reminded_day_of = excluded.reminded_day_of, updated_at = excluded.updated_at
       `).run(
         a.id, a.profile_id, a.title, a.doctor_name || '', a.hospital, a.department || '',
-        a.appointment_date, a.appointment_time || '09:00', a.prep_notes || '',
+        normDate, normTime, a.prep_notes || '',
         typeof a.prep_checklist === 'string' ? a.prep_checklist : JSON.stringify(a.prep_checklist || []),
         a.slip_image_url || '', a.notes || '', a.status || 'upcoming',
         Number(a.reminded_7d) || 0, Number(a.reminded_3d) || 0, Number(a.reminded_1d) || 0, Number(a.reminded_day_of) || 0,
@@ -181,11 +222,17 @@ const THAI_MONTHS = [
 const THAI_DAYS = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
 function formatThaiDate(dateStr, timeStr) {
-  const [year, month, day] = dateStr.split('-').map(Number);
+  const normDate = normalizeApptDate(dateStr);
+  const normTime = normalizeApptTime(timeStr);
+  const match = normDate.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!match) return normDate;
+  const year = parseInt(match[1], 10);
+  const month = parseInt(match[2], 10);
+  const day = parseInt(match[3], 10);
   const dateObj = new Date(year, month - 1, day);
-  const dayName = THAI_DAYS[dateObj.getDay()];
+  const dayName = THAI_DAYS[dateObj.getDay()] || '';
   const thaiYear = year + 543;
-  return `วัน${dayName}ที่ ${day} ${THAI_MONTHS[month - 1]} ${thaiYear}${timeStr ? ` เวลา ${timeStr} น.` : ''}`;
+  return `วัน${dayName}ที่ ${day} ${THAI_MONTHS[month - 1]} ${thaiYear}${normTime ? ` เวลา ${normTime} น.` : ''}`;
 }
 
 // Generate Discord Rich Embed Message
