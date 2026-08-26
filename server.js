@@ -577,6 +577,21 @@ const server = http.createServer(async (req, res) => {
     // API ROUTE: /api/profiles
     if (pathname === '/api/profiles') {
       if (method === 'GET') {
+        const rows = db.prepare('SELECT * FROM profiles ORDER BY created_at ASC').all();
+        
+        // Background sync with Google Sheets without blocking response
+        callGoogleSheets('getProfiles').then(sheetProfiles => {
+          if (sheetProfiles && sheetProfiles.success && Array.isArray(sheetProfiles.data) && sheetProfiles.data.length > 0) {
+            syncLocalProfiles(sheetProfiles.data);
+          }
+        }).catch(() => {});
+
+        if (rows.length > 0) {
+          sendJson(200, rows);
+          return;
+        }
+
+        // If local is completely empty, wait for Google Sheets
         const sheetProfiles = await callGoogleSheets('getProfiles');
         if (sheetProfiles && sheetProfiles.success && Array.isArray(sheetProfiles.data) && sheetProfiles.data.length > 0) {
           syncLocalProfiles(sheetProfiles.data);
@@ -584,7 +599,6 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        const rows = db.prepare('SELECT * FROM profiles ORDER BY created_at ASC').all();
         sendJson(200, rows);
         return;
       }
@@ -608,7 +622,8 @@ const server = http.createServer(async (req, res) => {
           VALUES (?, ?, ?, ?, ?, ?)
         `).run(id, newProfile.name, newProfile.relation, newProfile.color, newProfile.avatar, now);
 
-        await callGoogleSheets('saveProfile', { profile: newProfile });
+        // Async background sync with Google Sheets
+        callGoogleSheets('saveProfile', { profile: newProfile }).catch(e => console.error(e));
 
         const created = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id);
         sendJson(201, created);
@@ -625,9 +640,10 @@ const server = http.createServer(async (req, res) => {
           WHERE id = ?
         `).run(body.name, body.relation, body.color, body.avatar, profileId);
 
-        await callGoogleSheets('saveProfile', {
+        // Async background sync
+        callGoogleSheets('saveProfile', {
           profile: { id: profileId, name: body.name, relation: body.relation, color: body.color, avatar: body.avatar }
-        });
+        }).catch(e => console.error(e));
 
         const updated = db.prepare('SELECT * FROM profiles WHERE id = ?').get(profileId);
         sendJson(200, updated);
@@ -640,7 +656,7 @@ const server = http.createServer(async (req, res) => {
           return sendError(400, `ไม่สามารถลบโปรไฟล์นี้ได้เนื่องจากมี ${count} รายการนัดหมายผูกอยู่`);
         }
         db.prepare('DELETE FROM profiles WHERE id = ?').run(profileId);
-        await callGoogleSheets('deleteProfile', { id: profileId });
+        callGoogleSheets('deleteProfile', { id: profileId }).catch(e => console.error(e));
         sendJson(200, { success: true });
         return;
       }
@@ -652,23 +668,12 @@ const server = http.createServer(async (req, res) => {
         const profileId = parsedUrl.searchParams.get('profile_id');
         const status = parsedUrl.searchParams.get('status');
 
-        const sheetRes = await callGoogleSheets('getAppointments');
-        if (sheetRes && sheetRes.success && Array.isArray(sheetRes.data)) {
-          syncLocalAppointments(sheetRes.data);
-          let filtered = sheetRes.data;
-          if (profileId && profileId !== 'all') {
-            filtered = filtered.filter(a => a.profile_id === profileId);
+        // Background sync with Google Sheets without blocking response
+        callGoogleSheets('getAppointments').then(sheetRes => {
+          if (sheetRes && sheetRes.success && Array.isArray(sheetRes.data)) {
+            syncLocalAppointments(sheetRes.data);
           }
-          if (status && status !== 'all') {
-            filtered = filtered.filter(a => a.status === status);
-          }
-          filtered.sort((a, b) => {
-            const d = (a.appointment_date || '').localeCompare(b.appointment_date || '');
-            return d !== 0 ? d : (a.appointment_time || '').localeCompare(b.appointment_time || '');
-          });
-          sendJson(200, filtered);
-          return;
-        }
+        }).catch(() => {});
 
         let sql = `
           SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
@@ -689,6 +694,31 @@ const server = http.createServer(async (req, res) => {
 
         sql += ' ORDER BY a.appointment_date ASC, a.appointment_time ASC';
         const rows = db.prepare(sql).all(...params);
+
+        if (rows.length > 0) {
+          sendJson(200, rows);
+          return;
+        }
+
+        // If local is empty, wait for Google Sheets
+        const sheetRes = await callGoogleSheets('getAppointments');
+        if (sheetRes && sheetRes.success && Array.isArray(sheetRes.data)) {
+          syncLocalAppointments(sheetRes.data);
+          let filtered = sheetRes.data;
+          if (profileId && profileId !== 'all') {
+            filtered = filtered.filter(a => a.profile_id === profileId);
+          }
+          if (status && status !== 'all') {
+            filtered = filtered.filter(a => a.status === status);
+          }
+          filtered.sort((a, b) => {
+            const d = (a.appointment_date || '').localeCompare(b.appointment_date || '');
+            return d !== 0 ? d : (a.appointment_time || '').localeCompare(b.appointment_time || '');
+          });
+          sendJson(200, filtered);
+          return;
+        }
+
         sendJson(200, rows);
         return;
       }
@@ -732,7 +762,8 @@ const server = http.createServer(async (req, res) => {
           newAppt.prep_checklist, newAppt.slip_image_url, newAppt.notes, newAppt.status, now, now
         );
 
-        await callGoogleSheets('saveAppointment', { appointment: newAppt });
+        // Async background sync with Google Sheets (Non-blocking!)
+        callGoogleSheets('saveAppointment', { appointment: newAppt }).catch(e => console.error(e));
 
         const created = db.prepare(`
           SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
@@ -742,18 +773,15 @@ const server = http.createServer(async (req, res) => {
         `).get(id);
 
         if (body.notify_now) {
-          try {
-            await sendDiscordNotification(created, {
-              name: created.profile_name,
-              relation: created.profile_relation,
-              color: created.profile_color,
-              avatar: created.profile_avatar
-            }, 'create');
-          } catch (e) {
-            console.error('Error sending immediate discord notification:', e);
-          }
+          sendDiscordNotification(created, {
+            name: created.profile_name,
+            relation: created.profile_relation,
+            color: created.profile_color,
+            avatar: created.profile_avatar
+          }, 'create').catch(e => console.error('Error sending discord notification:', e));
         }
 
+        // Return immediately in milliseconds!
         sendJson(201, created);
         return;
       }
@@ -808,9 +836,10 @@ const server = http.createServer(async (req, res) => {
         db.prepare('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?')
           .run(newStatus, new Date().toISOString(), apptId);
 
-        await callGoogleSheets('updateAppointment', {
+        // Async background sync
+        callGoogleSheets('updateAppointment', {
           appointment: Object.assign({}, existing, { status: newStatus })
-        });
+        }).catch(e => console.error(e));
 
         sendJson(200, { success: true });
         return;
@@ -848,7 +877,8 @@ const server = http.createServer(async (req, res) => {
           updatedAppt.updated_at, apptId
         );
 
-        await callGoogleSheets('updateAppointment', { appointment: updatedAppt });
+        // Async background sync
+        callGoogleSheets('updateAppointment', { appointment: updatedAppt }).catch(e => console.error(e));
 
         const updated = db.prepare(`
           SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
@@ -869,7 +899,7 @@ const server = http.createServer(async (req, res) => {
           }
         }
         db.prepare('DELETE FROM appointments WHERE id = ?').run(apptId);
-        await callGoogleSheets('deleteAppointment', { id: apptId });
+        callGoogleSheets('deleteAppointment', { id: apptId }).catch(e => console.error(e));
         sendJson(200, { success: true });
         return;
       }
