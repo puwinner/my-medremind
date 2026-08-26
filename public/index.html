@@ -33,7 +33,11 @@
       </div>
 
       <div class="flex items-center gap-2">
-        <button onclick="openSettingsModal()" class="p-2.5 text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-xl transition-colors text-base" title="ตั้งค่าการแจ้งเตือน Discord">
+        <button id="header-refresh-btn" onclick="manualSync()" class="flex items-center gap-1.5 px-3 py-2 text-slate-700 hover:text-blue-600 hover:bg-blue-50 active:bg-blue-100 rounded-xl transition-all text-xs md:text-sm font-bold border border-slate-200/80 bg-white/90 shadow-2xs cursor-pointer" title="รีเฟรชและซิงก์ข้อมูลจาก Google Sheets">
+          <span id="refresh-icon" class="inline-block transition-transform duration-500 text-sm">🔄</span>
+          <span class="inline">รีเฟรช</span>
+        </button>
+        <button onclick="openSettingsModal()" class="p-2.5 text-slate-600 hover:text-blue-600 hover:bg-slate-100 rounded-xl transition-colors text-base" title="ตั้งค่าระบบ">
           ⚙️
         </button>
         <button onclick="openAppointmentModal()" class="hidden md:inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl shadow-sm transition-all">
@@ -462,6 +466,6 @@
       });
     }
   </script>
-  <script src="/app.js?v=10"></script>
+  <script src="/app.js?v=11"></script>
 </body>
 </html>

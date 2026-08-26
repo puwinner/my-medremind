@@ -37,10 +37,45 @@ async function loadInitialData() {
   try {
     await Promise.all([fetchProfiles(), fetchAppointments(), fetchSettings()]);
     renderAll();
+
+    // Auto-Sync Second Pass: If data is empty (Render cold boot) or to guarantee Google Sheets sync
+    if (state.appointments.length === 0) {
+      setTimeout(async () => {
+        try {
+          await manualSync(true);
+        } catch (e) {}
+      }, 1000);
+    }
   } catch (err) {
-    showToast('เกิดข้อผิดพลาดในการโหลดข้อมูล: ' + err.message, 'error');
+    showToast('กำลังโหลดข้อมูล...', 'info');
+    setTimeout(async () => {
+      try { await manualSync(true); } catch(e) {}
+    }, 1500);
   } finally {
     showLoading(false);
+  }
+}
+
+async function manualSync(silent = false) {
+  const icon = document.getElementById('refresh-icon');
+  if (icon) icon.classList.add('animate-spin');
+
+  if (!silent) showLoading(true);
+
+  try {
+    // 1. Force server-side sync with Google Sheets
+    await fetch(`${API_BASE}/api/sync`, { method: 'POST' }).catch(() => {});
+    
+    // 2. Fetch fresh updated data
+    await Promise.all([fetchProfiles(), fetchAppointments(), fetchSettings()]);
+    renderAll();
+
+    if (!silent) showToast('ซิงก์ข้อมูลล่าสุดจาก Google Sheets สำเร็จแล้ว 🔄', 'success');
+  } catch (err) {
+    if (!silent) showToast('ซิงก์ข้อมูลไม่สำเร็จ: ' + err.message, 'error');
+  } finally {
+    if (icon) setTimeout(() => icon.classList.remove('animate-spin'), 600);
+    if (!silent) showLoading(false);
   }
 }
 
