@@ -678,8 +678,7 @@ function addQuickPrep(text) {
   addChecklistItem(text);
   const prepInput = document.getElementById('form-prep-notes');
   if (prepInput && !prepInput.value.includes(text)) {
-    prepInput.value = (prepInput.value ? prepInput.value + '
-' : '') + text;
+    prepInput.value = (prepInput.value ? prepInput.value + '\n' : '') + text;
   }
 }
 
@@ -1063,5 +1062,3 @@ function setupEventListeners() {
   }
 }
 
-fs.writeFileSync('public/app.js', appJsParts.join(''), 'utf-8');
-console.log('public/app.js written successfully');
