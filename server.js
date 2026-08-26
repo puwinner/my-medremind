@@ -895,12 +895,16 @@ const server = http.createServer(async (req, res) => {
         );
 
         // Async background sync with Google Sheets (Non-blocking!)
-        callGoogleSheets('saveAppointment', { appointment: newAppt }).catch(e => console.error(e));
+        callGoogleSheets('saveAppointment', { appointment: newAppt }).then(res => {
+          if (res && res.slip_image_url && res.slip_image_url !== newAppt.slip_image_url) {
+            db.prepare('UPDATE appointments SET slip_image_url = ? WHERE id = ?').run(res.slip_image_url, id);
+          }
+        }).catch(e => console.error(e));
 
         const created = db.prepare(`
           SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
           FROM appointments a
-          JOIN profiles p ON a.profile_id = p.id
+          LEFT JOIN profiles p ON a.profile_id = p.id
           WHERE a.id = ?
         `).get(id);
 
@@ -1010,12 +1014,16 @@ const server = http.createServer(async (req, res) => {
         );
 
         // Async background sync
-        callGoogleSheets('updateAppointment', { appointment: updatedAppt }).catch(e => console.error(e));
+        callGoogleSheets('updateAppointment', { appointment: updatedAppt }).then(res => {
+          if (res && res.slip_image_url && res.slip_image_url !== updatedAppt.slip_image_url) {
+            db.prepare('UPDATE appointments SET slip_image_url = ? WHERE id = ?').run(res.slip_image_url, apptId);
+          }
+        }).catch(e => console.error(e));
 
         const updated = db.prepare(`
           SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
           FROM appointments a
-          JOIN profiles p ON a.profile_id = p.id
+          LEFT JOIN profiles p ON a.profile_id = p.id
           WHERE a.id = ?
         `).get(apptId);
 
