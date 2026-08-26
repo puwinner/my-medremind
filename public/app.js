@@ -1138,6 +1138,74 @@ async function deleteProfile(profileId) {
   }
 }
 
+let viewerZoom = 1;
+let viewerPanX = 0;
+let viewerPanY = 0;
+let isViewerDragging = false;
+let viewerStartX = 0;
+let viewerStartY = 0;
+let currentViewerUrl = '';
+
+function updateViewerTransform() {
+  const img = document.getElementById('viewer-img');
+  const badge = document.getElementById('zoom-level-badge');
+  if (img) {
+    img.style.transform = `translate(${viewerPanX}px, ${viewerPanY}px) scale(${viewerZoom})`;
+  }
+  if (badge) {
+    badge.textContent = `${Math.round(viewerZoom * 100)}%`;
+  }
+}
+
+function zoomInImage() {
+  viewerZoom = Math.min(viewerZoom + 0.5, 4);
+  updateViewerTransform();
+}
+
+function zoomOutImage() {
+  viewerZoom = Math.max(viewerZoom - 0.5, 0.75);
+  if (viewerZoom <= 1) {
+    viewerPanX = 0;
+    viewerPanY = 0;
+  }
+  updateViewerTransform();
+}
+
+function resetImageZoom() {
+  viewerZoom = 1;
+  viewerPanX = 0;
+  viewerPanY = 0;
+  updateViewerTransform();
+}
+
+function openOriginalImageInTab() {
+  if (!currentViewerUrl) return;
+
+  if (currentViewerUrl.startsWith('data:')) {
+    try {
+      const parts = currentViewerUrl.split(';base64,');
+      const contentType = parts[0].split(':')[1] || 'image/jpeg';
+      const raw = window.atob(parts[1]);
+      const rawLength = raw.length;
+      const uInt8Array = new Uint8Array(rawLength);
+      for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+      }
+      const blob = new Blob([uInt8Array], { type: contentType });
+      const blobUrl = URL.createObjectURL(blob);
+      const w = window.open(blobUrl, '_blank');
+      if (!w) {
+        // Pop-up blocked, fallback
+        window.location.href = blobUrl;
+      }
+    } catch (e) {
+      window.open(currentViewerUrl, '_blank');
+    }
+  } else {
+    window.open(currentViewerUrl, '_blank');
+  }
+}
+
 function openApptImageViewer(apptId) {
   const appt = state.appointments.find(a => a.id === apptId);
   if (appt && appt.slip_image_url) {
@@ -1147,9 +1215,12 @@ function openApptImageViewer(apptId) {
 
 function openImageViewer(url) {
   if (!url) return;
+  currentViewerUrl = url;
+  resetImageZoom();
+
   const modal = document.getElementById('image-viewer-modal');
   const img = document.getElementById('viewer-img');
-  const downloadBtn = document.getElementById('viewer-download-btn');
+  const container = document.getElementById('viewer-container');
   if (!modal || !img) return;
 
   img.onerror = () => {
@@ -1157,18 +1228,75 @@ function openImageViewer(url) {
   };
 
   img.src = url;
-  if (downloadBtn) {
-    downloadBtn.href = url;
-    downloadBtn.download = `medical_slip_${Date.now()}.jpg`;
-  }
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
+
+  // Setup pan/drag & double-tap listeners
+  if (container && !container.dataset.listenersAttached) {
+    container.dataset.listenersAttached = 'true';
+
+    // Mouse Drag
+    container.addEventListener('mousedown', (e) => {
+      if (viewerZoom <= 1) return;
+      isViewerDragging = true;
+      viewerStartX = e.clientX - viewerPanX;
+      viewerStartY = e.clientY - viewerPanY;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isViewerDragging) return;
+      viewerPanX = e.clientX - viewerStartX;
+      viewerPanY = e.clientY - viewerStartY;
+      updateViewerTransform();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isViewerDragging = false;
+    });
+
+    // Touch Drag (Mobile)
+    container.addEventListener('touchstart', (e) => {
+      if (e.touches.length === 1 && viewerZoom > 1) {
+        isViewerDragging = true;
+        viewerStartX = e.touches[0].clientX - viewerPanX;
+        viewerStartY = e.touches[0].clientY - viewerPanY;
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchmove', (e) => {
+      if (isViewerDragging && e.touches.length === 1) {
+        viewerPanX = e.touches[0].clientX - viewerStartX;
+        viewerPanY = e.touches[0].clientY - viewerStartY;
+        updateViewerTransform();
+      }
+    }, { passive: true });
+
+    container.addEventListener('touchend', () => {
+      isViewerDragging = false;
+    });
+
+    // Double Click / Double Tap to toggle zoom
+    let lastTap = 0;
+    container.addEventListener('click', (e) => {
+      const now = Date.now();
+      if (now - lastTap < 300) {
+        if (viewerZoom > 1) {
+          resetImageZoom();
+        } else {
+          viewerZoom = 2.5;
+          updateViewerTransform();
+        }
+      }
+      lastTap = now;
+    });
+  }
 }
 
 function closeImageViewer() {
   const modal = document.getElementById('image-viewer-modal');
   if (modal) modal.classList.add('hidden');
   document.body.style.overflow = '';
+  resetImageZoom();
 }
 
 function switchTab(tabName) {

@@ -426,22 +426,45 @@
   </div>
 
   <!-- ===================================================================== -->
-  <!-- MODAL 4: Fullscreen Image Viewer Modal                               -->
+  <!-- MODAL 4: Fullscreen Interactive Image Viewer Modal (Zoom & Pan)       -->
   <!-- ===================================================================== -->
-  <div id="image-viewer-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md hidden select-none" onclick="closeImageViewer()">
-    <button type="button" onclick="closeImageViewer()" class="fixed top-4 right-4 z-50 w-11 h-11 bg-white/20 hover:bg-white/30 active:bg-white/40 text-white rounded-full flex items-center justify-center text-2xl font-bold backdrop-blur-md shadow-xl transition-all" title="ปิด">
-      ✕
-    </button>
-    <div class="relative max-w-4xl max-h-[88vh] flex flex-col items-center justify-center" onclick="event.stopPropagation()">
-      <img id="viewer-img" src="" alt="ใบนัดแพทย์ขยายใหญ่" class="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/20 transition-transform duration-200" />
-      <div class="flex items-center gap-3 mt-3">
-        <a id="viewer-download-btn" href="#" target="_blank" class="px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs md:text-sm font-semibold rounded-xl backdrop-blur-md flex items-center gap-1.5 transition-all shadow-lg">
-          <span>🔍</span> เปิดดูภาพต้นฉบับ
-        </a>
-        <button type="button" onclick="closeImageViewer()" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs md:text-sm font-semibold rounded-xl backdrop-blur-md transition-all">
-          ปิดหน้าต่าง
+  <div id="image-viewer-modal" class="fixed inset-0 z-50 flex flex-col items-center justify-between p-3 sm:p-4 bg-black/95 backdrop-blur-md hidden select-none">
+    <!-- Top Bar Controls -->
+    <div class="w-full max-w-4xl flex items-center justify-between z-50 text-white pt-2 px-2">
+      <div class="flex items-center gap-2 bg-white/15 backdrop-blur-md px-3.5 py-1.5 rounded-2xl text-xs font-bold">
+        <span>📸 ใบนัดแพทย์</span>
+        <span id="zoom-level-badge" class="bg-blue-600 px-2 py-0.5 rounded-lg text-2xs">100%</span>
+      </div>
+      
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="zoomInImage()" class="w-10 h-10 bg-white/20 hover:bg-white/30 active:bg-white/40 rounded-full flex items-center justify-center text-lg font-bold transition-all shadow-lg cursor-pointer" title="ซูมเข้า (+)">
+          ➕
+        </button>
+        <button type="button" onclick="zoomOutImage()" class="w-10 h-10 bg-white/20 hover:bg-white/30 active:bg-white/40 rounded-full flex items-center justify-center text-lg font-bold transition-all shadow-lg cursor-pointer" title="ซูมออก (-)">
+          ➖
+        </button>
+        <button type="button" onclick="resetImageZoom()" class="w-10 h-10 bg-white/20 hover:bg-white/30 active:bg-white/40 rounded-full flex items-center justify-center text-base font-bold transition-all shadow-lg cursor-pointer" title="รีเซ็ต">
+          ↺
+        </button>
+        <button type="button" onclick="closeImageViewer()" class="w-10 h-10 bg-red-500/80 hover:bg-red-600 active:bg-red-700 text-white rounded-full flex items-center justify-center text-xl font-bold transition-all shadow-lg ml-1 cursor-pointer" title="ปิด">
+          ✕
         </button>
       </div>
+    </div>
+
+    <!-- Image Container with Pan / Zoom Area -->
+    <div id="viewer-container" class="relative w-full flex-1 flex items-center justify-center overflow-hidden my-2 cursor-grab active:cursor-grabbing touch-none">
+      <img id="viewer-img" src="" alt="ใบนัดแพทย์" class="max-w-full max-h-[75vh] object-contain rounded-2xl shadow-2xl transition-transform duration-100 ease-out origin-center pointer-events-auto" />
+    </div>
+
+    <!-- Bottom Actions -->
+    <div class="w-full max-w-md flex items-center justify-center gap-3 pb-3 z-50">
+      <button type="button" onclick="openOriginalImageInTab()" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs md:text-sm font-bold rounded-2xl backdrop-blur-md flex items-center gap-2 transition-all shadow-xl cursor-pointer">
+        <span>🔍</span> เปิดดูภาพต้นฉบับเต็มจอ
+      </button>
+      <button type="button" onclick="closeImageViewer()" class="px-5 py-2.5 bg-white/20 hover:bg-white/30 text-white text-xs md:text-sm font-bold rounded-2xl backdrop-blur-md transition-all shadow-lg cursor-pointer">
+        ปิดหน้าต่าง
+      </button>
     </div>
   </div>
 
@@ -466,6 +489,6 @@
       });
     }
   </script>
-  <script src="/app.js?v=14"></script>
+  <script src="/app.js?v=15"></script>
 </body>
 </html>
