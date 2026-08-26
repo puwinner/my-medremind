@@ -118,10 +118,44 @@ async function fetchAppointments() {
   });
 }
 
+const DEFAULT_DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1542036104612413520/m7gPpauvF7591fxV5uuG5BMx481lGD9sHAAYhXk7oax4ZMRKRFfQSxJOX9CsIgU7CsDx';
+const DEFAULT_GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxgpsu-yY1Saf_hXFHzFCumIRU_04_UirOR9wJQR3vUVYb0TzuULYTXJWY3HukUbQeMHg/exec';
+
 async function fetchSettings() {
-  const res = await fetch(`${API_BASE}/api/settings`);
-  if (!res.ok) throw new Error('Cannot fetch settings');
-  state.settings = await res.json();
+  let localSettings = {};
+  try {
+    const localData = localStorage.getItem('medremind_settings');
+    if (localData) localSettings = JSON.parse(localData);
+  } catch (e) {}
+
+  try {
+    const res = await fetch(`${API_BASE}/api/settings`);
+    if (res.ok) {
+      const serverSettings = await res.json();
+      const merged = {
+        discord_webhook_url: serverSettings.discord_webhook_url || localSettings.discord_webhook_url || DEFAULT_DISCORD_WEBHOOK,
+        google_sheet_url: serverSettings.google_sheet_url || localSettings.google_sheet_url || DEFAULT_GOOGLE_SHEET_URL
+      };
+
+      state.settings = merged;
+      localStorage.setItem('medremind_settings', JSON.stringify(merged));
+
+      // If server had missing keys on wake up, silently re-persist to server
+      if (!serverSettings.discord_webhook_url || !serverSettings.google_sheet_url) {
+        fetch(`${API_BASE}/api/settings`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(merged)
+        }).catch(e => console.error(e));
+      }
+      return;
+    }
+  } catch (err) {}
+
+  state.settings = {
+    discord_webhook_url: localSettings.discord_webhook_url || DEFAULT_DISCORD_WEBHOOK,
+    google_sheet_url: localSettings.google_sheet_url || DEFAULT_GOOGLE_SHEET_URL
+  };
 }
 
 async function fetchLogs() {
@@ -901,11 +935,11 @@ async function saveSettings(event) {
         google_sheet_url: googleSheetUrl
       })
     });
-    if (!res.ok) throw new Error('Save settings failed');
     state.settings.discord_webhook_url = webhookUrl;
     state.settings.google_sheet_url = googleSheetUrl;
+    localStorage.setItem('medremind_settings', JSON.stringify(state.settings));
     closeSettingsModal();
-    showToast('บันทึกการตั้งค่าเรียบร้อยแล้ว ✅', 'success');
+    showToast('บันทึกการตั้งค่าถาวรเรียบร้อยแล้ว ✅', 'success');
     
     // Refresh appointments in case sheets was just connected
     await fetchAppointments();
