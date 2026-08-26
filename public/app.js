@@ -156,6 +156,20 @@ async function fetchAppointments() {
 const DEFAULT_DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1542036104612413520/m7gPpauvF7591fxV5uuG5BMx481lGD9sHAAYhXk7oax4ZMRKRFfQSxJOX9CsIgU7CsDx';
 const DEFAULT_GOOGLE_SHEET_URL = 'https://script.google.com/macros/s/AKfycbxgpsu-yY1Saf_hXFHzFCumIRU_04_UirOR9wJQR3vUVYb0TzuULYTXJWY3HukUbQeMHg/exec';
 
+function sanitizeWebhookUrl(url) {
+  if (!url || typeof url !== 'string' || url.includes('mock') || !url.startsWith('https://discord.com/api/webhooks/')) {
+    return DEFAULT_DISCORD_WEBHOOK;
+  }
+  return url.trim();
+}
+
+function sanitizeSheetUrl(url) {
+  if (!url || typeof url !== 'string' || url.includes('mock') || !url.startsWith('https://script.google.com/macros/')) {
+    return DEFAULT_GOOGLE_SHEET_URL;
+  }
+  return url.trim();
+}
+
 async function fetchSettings() {
   let localSettings = {};
   try {
@@ -167,16 +181,19 @@ async function fetchSettings() {
     const res = await fetch(`${API_BASE}/api/settings`);
     if (res.ok) {
       const serverSettings = await res.json();
+      const rawWebhook = serverSettings.discord_webhook_url || localSettings.discord_webhook_url;
+      const rawSheet = serverSettings.google_sheet_url || localSettings.google_sheet_url;
+
       const merged = {
-        discord_webhook_url: serverSettings.discord_webhook_url || localSettings.discord_webhook_url || DEFAULT_DISCORD_WEBHOOK,
-        google_sheet_url: serverSettings.google_sheet_url || localSettings.google_sheet_url || DEFAULT_GOOGLE_SHEET_URL
+        discord_webhook_url: sanitizeWebhookUrl(rawWebhook),
+        google_sheet_url: sanitizeSheetUrl(rawSheet)
       };
 
       state.settings = merged;
       localStorage.setItem('medremind_settings', JSON.stringify(merged));
 
-      // If server had missing keys on wake up, silently re-persist to server
-      if (!serverSettings.discord_webhook_url || !serverSettings.google_sheet_url) {
+      // If server had missing or mock keys on wake up, silently re-persist to server
+      if (!serverSettings.discord_webhook_url || serverSettings.discord_webhook_url.includes('mock') || !serverSettings.google_sheet_url || serverSettings.google_sheet_url.includes('mock')) {
         fetch(`${API_BASE}/api/settings`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -188,8 +205,8 @@ async function fetchSettings() {
   } catch (err) {}
 
   state.settings = {
-    discord_webhook_url: localSettings.discord_webhook_url || DEFAULT_DISCORD_WEBHOOK,
-    google_sheet_url: localSettings.google_sheet_url || DEFAULT_GOOGLE_SHEET_URL
+    discord_webhook_url: sanitizeWebhookUrl(localSettings.discord_webhook_url),
+    google_sheet_url: sanitizeSheetUrl(localSettings.google_sheet_url)
   };
 }
 
@@ -939,9 +956,9 @@ async function handleAppointmentSubmit(event) {
 
 function openSettingsModal() {
   const modal = document.getElementById('settings-modal');
-  document.getElementById('setting-webhook').value = state.settings.discord_webhook_url || '';
+  document.getElementById('setting-webhook').value = sanitizeWebhookUrl(state.settings.discord_webhook_url);
   const sheetInput = document.getElementById('setting-google-sheet');
-  if (sheetInput) sheetInput.value = state.settings.google_sheet_url || '';
+  if (sheetInput) sheetInput.value = sanitizeSheetUrl(state.settings.google_sheet_url);
   modal.classList.remove('hidden');
 }
 
