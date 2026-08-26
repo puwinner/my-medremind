@@ -1,4 +1,4 @@
-﻿/* MedRemind Custom Styles */
+/* MedRemind Custom Styles */
 @import url('https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap');
 
 :root {
@@ -6,15 +6,44 @@
   --primary-hover: #1d4ed8;
 }
 
+html {
+  font-size: 16.5px;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: 17px;
+  }
+}
+
 * {
   font-family: 'Prompt', -apple-system, BlinkMacSystemFont, sans-serif;
   -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   background-color: #f8fafc;
   color: #0f172a;
   overscroll-behavior-y: none;
+  line-height: 1.55;
+}
+
+/* Ensure form inputs have comfortably readable fonts without iOS Safari zooming */
+input, textarea, select {
+  font-size: 0.925rem !important;
+  line-height: 1.4 !important;
+}
+
+/* Boost tiny subtexts for comfortable readability */
+.text-\[10px\] {
+  font-size: 0.75rem !important;
+}
+
+.text-\[11px\] {
+  font-size: 0.8125rem !important;
 }
 
 /* Custom scrollbars */

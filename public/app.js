@@ -158,16 +158,16 @@ function renderStats() {
       const next = upcomingList[0];
       const rel = getRelativeDayInfo(next.appointment_date);
       nextApptEl.innerHTML = `
-        <div class="flex items-center justify-between">
-          <span class="text-xs font-medium text-blue-600 truncate">${escapeHtml(next.title)}</span>
-          <span class="text-[10px] px-2 py-0.5 rounded-full font-bold ${rel.badgeClass}">${rel.text}</span>
+        <div class="flex items-center justify-between gap-2 mb-1">
+          <span class="text-sm md:text-base font-bold text-slate-900 truncate">🏥 ${escapeHtml(next.title)}</span>
+          <span class="text-xs px-2.5 py-0.5 rounded-full font-bold shadow-2xs ${rel.badgeClass}">${rel.text}</span>
         </div>
-        <div class="text-xs text-slate-500 truncate mt-0.5">
-          ${formatThaiShortDate(next.appointment_date)} เวลา ${next.appointment_time || '-'} น. • ${escapeHtml(next.hospital)}
+        <div class="text-xs md:text-sm text-slate-600 font-medium truncate">
+          👤 <strong>${escapeHtml(next.profile_name)}</strong> • 📅 ${formatThaiShortDate(next.appointment_date)} เวลา ${next.appointment_time || '-'} น. • ${escapeHtml(next.hospital)}
         </div>
       `;
     } else {
-      nextApptEl.innerHTML = `<span class="text-xs text-slate-400">ไม่มีนัดหมายเร็วๆ นี้</span>`;
+      nextApptEl.innerHTML = `<span class="text-sm text-slate-400 font-medium">ไม่มีนัดหมายเร็วๆ นี้</span>`;
     }
   }
 }
@@ -225,40 +225,40 @@ function renderTimelineView(container) {
 
         <div>
           <div class="flex items-center justify-between mb-3 pt-1">
-            <div class="flex items-center gap-2">
-              <span class="w-7 h-7 rounded-full flex items-center justify-center text-sm shadow-sm" style="background-color: ${appt.profile_color}15; border: 1px solid ${appt.profile_color}40;">
+            <div class="flex items-center gap-2.5">
+              <span class="w-8 h-8 rounded-full flex items-center justify-center text-base shadow-sm" style="background-color: ${appt.profile_color}15; border: 1.5px solid ${appt.profile_color}40;">
                 ${appt.profile_avatar || '👤'}
               </span>
               <div>
-                <div class="text-xs font-semibold text-slate-800 leading-tight">${escapeHtml(appt.profile_name)}</div>
-                <div class="text-[10px] text-slate-400">${escapeHtml(appt.profile_relation || '')}</div>
+                <div class="text-sm font-bold text-slate-900 leading-tight">${escapeHtml(appt.profile_name)}</div>
+                <div class="text-xs text-slate-500">${escapeHtml(appt.profile_relation || '')}</div>
               </div>
             </div>
             
             <div class="flex items-center gap-1.5">
               ${
                 isCompleted
-                  ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">ไปตามนัดแล้ว ✓</span>`
-                  : `<span class="text-[11px] font-bold px-2.5 py-0.5 rounded-full shadow-xs ${rel.badgeClass}">${rel.text}</span>`
+                  ? `<span class="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">ไปตามนัดแล้ว ✓</span>`
+                  : `<span class="text-xs font-bold px-3 py-1 rounded-full shadow-xs ${rel.badgeClass}">${rel.text}</span>`
               }
             </div>
           </div>
 
-          <h3 class="text-sm md:text-base font-bold text-slate-900 mb-1 leading-snug">
+          <h3 class="text-base md:text-lg font-bold text-slate-900 mb-2 leading-snug">
             ${escapeHtml(appt.title)}
           </h3>
 
-          <div class="space-y-1 text-xs text-slate-600 mb-3">
-            <div class="flex items-center gap-1.5">
+          <div class="space-y-1.5 text-sm text-slate-700 mb-3.5">
+            <div class="flex items-center gap-2">
               <span class="text-slate-400">🏥</span>
-              <span class="font-medium text-slate-700">${escapeHtml(appt.hospital)}</span>
-              ${appt.department ? `<span class="text-slate-400">(${escapeHtml(appt.department)})</span>` : ''}
+              <span class="font-semibold text-slate-800">${escapeHtml(appt.hospital)}</span>
+              ${appt.department ? `<span class="text-slate-500 font-normal">(${escapeHtml(appt.department)})</span>` : ''}
             </div>
-            <div class="flex items-center gap-1.5">
+            <div class="flex items-center gap-2">
               <span class="text-slate-400">👨‍⚕️</span>
               <span>${appt.doctor_name ? `นพ./พญ. ${escapeHtml(appt.doctor_name)}` : 'ไม่ระบุแพทย์'}</span>
             </div>
-            <div class="flex items-center gap-1.5 font-medium text-blue-700 bg-blue-50/70 px-2 py-1 rounded-lg w-fit">
+            <div class="flex items-center gap-2 font-semibold text-blue-700 bg-blue-50/80 px-2.5 py-1 rounded-lg w-fit">
               <span>📅</span>
               <span>${thaiDateStr}</span>
               <span class="text-blue-400">•</span>
@@ -269,18 +269,18 @@ function renderTimelineView(container) {
           ${
             appt.prep_notes || checklist.length > 0
               ? `
-              <div class="bg-amber-50/80 border border-amber-200/70 rounded-xl p-2.5 mb-3 text-xs">
-                <div class="flex items-center gap-1 text-amber-800 font-semibold mb-1">
-                  <span>⚠️</span> สิ่งที่ต้องเตรียมตัว & ข้อปฏิบัติ:
+              <div class="bg-amber-50/90 border border-amber-200/80 rounded-xl p-3 mb-3 text-xs md:text-sm">
+                <div class="flex items-center gap-1.5 text-amber-900 font-bold mb-1.5">
+                  <span class="text-base">⚠️</span> สิ่งที่ต้องเตรียมตัว & ข้อปฏิบัติ:
                 </div>
-                ${appt.prep_notes ? `<p class="text-amber-900 mb-1.5 font-medium">${escapeHtml(appt.prep_notes)}</p>` : ''}
+                ${appt.prep_notes ? `<p class="text-amber-950 mb-1.5 font-medium leading-relaxed">${escapeHtml(appt.prep_notes)}</p>` : ''}
                 ${
                   checklist.length > 0
                     ? `
-                  <ul class="space-y-0.5 text-amber-800 text-[11px]">
+                  <ul class="space-y-1 text-amber-900 text-xs md:text-sm font-medium">
                     ${checklist.map(item => `
-                      <li class="flex items-start gap-1">
-                        <span class="text-amber-500">•</span>
+                      <li class="flex items-start gap-1.5">
+                        <span class="text-amber-600 font-bold">•</span>
                         <span>${escapeHtml(item.text || item)}</span>
                       </li>
                     `).join('')}
@@ -297,12 +297,12 @@ function renderTimelineView(container) {
             appt.slip_image_url
               ? `
               <div class="mb-3">
-                <div class="flex items-center justify-between mb-1">
-                  <span class="text-[11px] font-medium text-slate-500">📸 ใบนัด / ใบสั่งยา</span>
+                <div class="flex items-center justify-between mb-1.5">
+                  <span class="text-xs font-semibold text-slate-600">📸 ใบนัด / ใบสั่งยา</span>
                 </div>
-                <div class="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 aspect-[16/9] bg-slate-100 max-h-36" onclick="openImageViewer('${appt.slip_image_url}')">
+                <div class="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 aspect-[16/9] bg-slate-100 max-h-40" onclick="openImageViewer('${appt.slip_image_url}')">
                   <img src="${appt.slip_image_url}" alt="ใบนัดแพทย์" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
-                  <div class="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-semibold gap-1">
+                  <div class="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-bold gap-1.5 backdrop-blur-xs">
                     <span>🔍 กดเพื่อดูภาพขยาย</span>
                   </div>
                 </div>
@@ -313,34 +313,34 @@ function renderTimelineView(container) {
 
           ${
             appt.notes
-              ? `<div class="text-[11px] text-slate-500 italic bg-slate-50 p-2 rounded-lg mb-3">💬 ${escapeHtml(appt.notes)}</div>`
+              ? `<div class="text-xs md:text-sm text-slate-600 italic bg-slate-50 p-2.5 rounded-xl mb-3 border border-slate-100">💬 ${escapeHtml(appt.notes)}</div>`
               : ''
           }
         </div>
 
         <div class="pt-3 border-t border-slate-100 mt-2">
-          <div class="grid grid-cols-3 gap-1.5 mb-2.5">
-            <button onclick="addToGoogleCalendar('${appt.id}')" title="เพิ่มลง Google Calendar พร้อมแจ้งเตือน" class="flex items-center justify-center gap-1 py-1.5 px-2 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-lg text-[11px] font-medium border border-slate-200 hover:border-blue-200 transition-colors">
+          <div class="grid grid-cols-3 gap-2 mb-3">
+            <button onclick="addToGoogleCalendar('${appt.id}')" title="เพิ่มลง Google Calendar พร้อมแจ้งเตือน" class="flex items-center justify-center gap-1 py-2 px-2 bg-slate-50 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-xl text-xs font-semibold border border-slate-200 hover:border-blue-200 transition-colors">
               <span>📅</span> G-Calendar
             </button>
-            <button onclick="downloadICS('${appt.id}')" title="ดาวน์โหลดไฟล์ .ics สำหรับ iOS/Android Calendar" class="flex items-center justify-center gap-1 py-1.5 px-2 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-lg text-[11px] font-medium border border-slate-200 hover:border-emerald-200 transition-colors">
+            <button onclick="downloadICS('${appt.id}')" title="ดาวน์โหลดไฟล์ .ics สำหรับ iOS/Android Calendar" class="flex items-center justify-center gap-1 py-2 px-2 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-xl text-xs font-semibold border border-slate-200 hover:border-emerald-200 transition-colors">
               <span>📲</span> .ICS (Alarm)
             </button>
-            <button onclick="testDiscordAlert('${appt.id}')" title="ทดสอบส่งแจ้งเตือนเข้า Discord ทันที" class="flex items-center justify-center gap-1 py-1.5 px-2 bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-lg text-[11px] font-medium border border-slate-200 hover:border-indigo-200 transition-colors">
+            <button onclick="testDiscordAlert('${appt.id}')" title="ทดสอบส่งแจ้งเตือนเข้า Discord ทันที" class="flex items-center justify-center gap-1 py-2 px-2 bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 rounded-xl text-xs font-semibold border border-slate-200 hover:border-indigo-200 transition-colors">
               <span>🔔</span> Discord
             </button>
           </div>
 
-          <div class="flex items-center justify-between text-xs pt-1">
-            <button onclick="toggleAppointmentStatus('${appt.id}', '${appt.status === 'completed' ? 'upcoming' : 'completed'}')" class="text-xs font-semibold ${
-              isCompleted ? 'text-slate-500 hover:text-blue-600' : 'text-emerald-600 hover:text-emerald-700'
-            } flex items-center gap-1">
+          <div class="flex items-center justify-between gap-2">
+            <button onclick="toggleAppointmentStatus('${appt.id}', '${appt.status === 'completed' ? 'upcoming' : 'completed'}')" class="text-xs md:text-sm font-bold ${
+              isCompleted ? 'text-slate-500 hover:text-blue-600 bg-slate-100' : 'text-emerald-700 hover:text-emerald-800 bg-emerald-50 border border-emerald-200'
+            } px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5 shadow-2xs">
               <span>${isCompleted ? '↩️ ปรับเป็นรอดำเนินการ' : '✅ บันทึกว่าไปแล้ว'}</span>
             </button>
 
-            <div class="flex items-center gap-2">
-              <button onclick="editAppointment('${appt.id}')" class="text-slate-400 hover:text-blue-600 p-1" title="แก้ไข">✏️</button>
-              <button onclick="deleteAppointment('${appt.id}')" class="text-slate-400 hover:text-red-600 p-1" title="ลบ">🗑️</button>
+            <div class="flex items-center gap-1">
+              <button onclick="editAppointment('${appt.id}')" class="text-slate-500 hover:text-blue-600 hover:bg-blue-50 p-2 rounded-xl transition-colors" title="แก้ไข">✏️</button>
+              <button onclick="deleteAppointment('${appt.id}')" class="text-slate-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-xl transition-colors" title="ลบ">🗑️</button>
             </div>
           </div>
         </div>
