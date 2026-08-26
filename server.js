@@ -133,13 +133,13 @@ function syncLocalProfiles(profiles) {
 function normalizeApptDate(val) {
   if (!val) return '';
   val = String(val).trim();
-  const match = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (match) {
-    const y = match[1];
-    const m = match[2].padStart(2, '0');
-    const d = match[3].padStart(2, '0');
-    return `${y}-${m}-${d}`;
+
+  // If already a clean YYYY-MM-DD string without time
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    return val;
   }
+
+  // If ISO string with T/Z (e.g. 2027-02-10T17:00:00.000Z), convert from UTC to Thai time (+7)
   const dt = new Date(val);
   if (!isNaN(dt.getTime())) {
     const tzOffset = 7 * 60 * 60 * 1000;
@@ -149,6 +149,15 @@ function normalizeApptDate(val) {
     const d = String(thaiTime.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
+
+  const match = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const y = match[1];
+    const m = match[2].padStart(2, '0');
+    const d = match[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
   return val;
 }
 
@@ -393,8 +402,10 @@ function logNotification(appointmentId, channel, triggerType, status, message) {
 
 // Generate RFC 5545 iCalendar (.ics) string
 function generateICS(appointment, profile) {
-  const [year, month, day] = appointment.appointment_date.split('-').map(Number);
-  const [hour, min] = (appointment.appointment_time || '09:00').split(':').map(Number);
+  const normDate = normalizeApptDate(appointment.appointment_date);
+  const normTime = normalizeApptTime(appointment.appointment_time);
+  const [year, month, day] = normDate.split('-').map(Number);
+  const [hour, min] = normTime.split(':').map(Number);
   
   const pad = n => String(n).padStart(2, '0');
   

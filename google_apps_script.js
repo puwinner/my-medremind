@@ -240,7 +240,13 @@ function formatSheetDate(rawVal, displayVal) {
     return displayVal.trim();
   }
   if (typeof displayVal === 'string' && displayVal.includes('T')) {
-    return displayVal.split('T')[0];
+    const dt = new Date(displayVal);
+    if (!isNaN(dt.getTime())) {
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + d;
+    }
   }
   return displayVal;
 }
