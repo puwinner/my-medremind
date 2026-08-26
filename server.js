@@ -1,4 +1,4 @@
-﻿// MedRemind Server - Node.js v24 + SQLite Server
+// MedRemind Server - Node.js v24 + SQLite Server
 // Features: REST API, Image Upload, SQLite Storage, Cron Notification Engine, Discord Webhook, iCal Generator
 
 const http = require('node:http');
@@ -240,6 +240,10 @@ async function sendDiscordNotification(appointment, profile, triggerType) {
     case 'test':
       triggerLabel = '🔔 ทดสอบการแจ้งเตือน';
       color = 0x8B5CF6;
+      break;
+    case 'create':
+      triggerLabel = '📢 บันทึกนัดหมายใหม่';
+      color = 0x3B82F6;
       break;
     default:
       triggerLabel = 'แจ้งเตือนนัดหมาย';
@@ -603,12 +607,16 @@ const server = http.createServer(async (req, res) => {
         `).get(id);
 
         if (body.notify_now) {
-          sendDiscordNotification(created, {
-            name: created.profile_name,
-            relation: created.profile_relation,
-            color: created.profile_color,
-            avatar: created.profile_avatar
-          }, 'test');
+          try {
+            await sendDiscordNotification(created, {
+              name: created.profile_name,
+              relation: created.profile_relation,
+              color: created.profile_color,
+              avatar: created.profile_avatar
+            }, 'create');
+          } catch (e) {
+            console.error('Error sending immediate discord notification:', e);
+          }
         }
 
         sendJson(201, created);
