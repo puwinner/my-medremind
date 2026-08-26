@@ -796,6 +796,8 @@ async function handleAppointmentSubmit(event) {
 function openSettingsModal() {
   const modal = document.getElementById('settings-modal');
   document.getElementById('setting-webhook').value = state.settings.discord_webhook_url || '';
+  const sheetInput = document.getElementById('setting-google-sheet');
+  if (sheetInput) sheetInput.value = state.settings.google_sheet_url || '';
   modal.classList.remove('hidden');
 }
 
@@ -806,17 +808,28 @@ function closeSettingsModal() {
 async function saveSettings(event) {
   event.preventDefault();
   const webhookUrl = document.getElementById('setting-webhook').value.trim();
+  const sheetInput = document.getElementById('setting-google-sheet');
+  const googleSheetUrl = sheetInput ? sheetInput.value.trim() : '';
 
   try {
     const res = await fetch(`${API_BASE}/api/settings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ discord_webhook_url: webhookUrl })
+      body: JSON.stringify({
+        discord_webhook_url: webhookUrl,
+        google_sheet_url: googleSheetUrl
+      })
     });
     if (!res.ok) throw new Error('Save settings failed');
     state.settings.discord_webhook_url = webhookUrl;
+    state.settings.google_sheet_url = googleSheetUrl;
     closeSettingsModal();
     showToast('บันทึกการตั้งค่าเรียบร้อยแล้ว ✅', 'success');
+    
+    // Refresh appointments in case sheets was just connected
+    await fetchAppointments();
+    await fetchProfiles();
+    renderAll();
   } catch (err) {
     showToast('บันทึกไม่สำเร็จ: ' + err.message, 'error');
   }
@@ -840,6 +853,33 @@ async function testDiscordSettings() {
     const data = await res.json();
     if (data.success) {
       showToast('เชื่อมต่อ Discord สำเร็จ! ได้รับข้อความทดสอบแล้ว 🎉', 'success');
+    } else {
+      showToast('เชื่อมต่อไม่สำเร็จ: ' + (data.error || 'โปรดตรวจสอบ URL'), 'error');
+    }
+  } catch (err) {
+    showToast('เกิดข้อผิดพลาด: ' + err.message, 'error');
+  }
+}
+
+async function testGoogleSheetsSettings() {
+  const sheetInput = document.getElementById('setting-google-sheet');
+  const sheetUrl = sheetInput ? sheetInput.value.trim() : '';
+  if (!sheetUrl) {
+    showToast('กรุณากรอก Google Sheet Web App URL ก่อนทดสอบ', 'error');
+    return;
+  }
+
+  showToast('กำลังทดสอบเชื่อมต่อ Google Sheets...', 'info');
+  try {
+    const res = await fetch(`${API_BASE}/api/settings/test-sheets`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ google_sheet_url: sheetUrl })
+    });
+
+    const data = await res.json();
+    if (data.success) {
+      showToast('เชื่อมต่อ Google Sheets สำเร็จ! 📊 ข้อมูลจะถูกบันทึกถาวร', 'success');
     } else {
       showToast('เชื่อมต่อไม่สำเร็จ: ' + (data.error || 'โปรดตรวจสอบ URL'), 'error');
     }
