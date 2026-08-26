@@ -838,25 +838,19 @@ function handleImageSelect(event) {
 
   showToast('กำลังประมวลผลรูปภาพ...', 'info');
 
-  compressImage(file, 1000, 0.7, async (compressedBase64) => {
+  compressImage(file, 800, 0.65, async (compressedBase64) => {
     state.uploadedImageUrl = compressedBase64;
     renderImageUploadPreview();
 
     try {
-      const res = await fetch(`${API_BASE}/api/upload`, {
+      fetch(`${API_BASE}/api/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ base64: compressedBase64 })
-      });
+      }).catch(() => {});
+    } catch (e) {}
 
-      if (res.ok) {
-        const data = await res.json();
-        if (data.url) state.uploadedImageUrl = data.url;
-      }
-      showToast('แนบรูปถ่ายใบนัดแพทย์เรียบร้อยแล้ว 📸', 'success');
-    } catch (err) {
-      showToast('แนบรูปถ่ายเรียบร้อยแล้ว 📸', 'success');
-    }
+    showToast('แนบรูปถ่ายใบนัดแพทย์เรียบร้อยแล้ว 📸', 'success');
   });
 }
 
@@ -1140,9 +1134,15 @@ function openImageViewer(url) {
   const img = document.getElementById('viewer-img');
   const downloadBtn = document.getElementById('viewer-download-btn');
   if (!modal || !img) return;
+
+  img.onerror = () => {
+    showToast('ไม่สามารถเปิดรูปภาพเดิมได้ กรุณาแก้ไขและแนบรูปใหม่อีกครั้ง 📸', 'error');
+  };
+
   img.src = url;
   if (downloadBtn) {
     downloadBtn.href = url;
+    downloadBtn.download = `medical_slip_${Date.now()}.jpg`;
   }
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
