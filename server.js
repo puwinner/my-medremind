@@ -69,6 +69,13 @@ db.exec(`
     message TEXT,
     sent_at TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS upload_files (
+    filename TEXT PRIMARY KEY,
+    data_base64 TEXT NOT NULL,
+    mime_type TEXT DEFAULT 'image/jpeg',
+    created_at TEXT
+  );
 `);
 
 // Insert default profiles if empty
@@ -1044,6 +1051,19 @@ const server = http.createServer(async (req, res) => {
       const savePath = path.join(UPLOADS_DIR, filename);
       fs.writeFileSync(savePath, fileBuffer);
 
+      // Persist to database upload_files table
+      try {
+        const base64Str = fileBuffer.toString('base64');
+        const mime = MIME_TYPES[fileExt] || 'image/jpeg';
+        db.prepare(`
+          INSERT INTO upload_files (filename, data_base64, mime_type, created_at)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(filename) DO UPDATE SET data_base64 = excluded.data_base64
+        `).run(filename, base64Str, mime, new Date().toISOString());
+      } catch (e) {
+        console.error('Error caching image to DB:', e);
+      }
+
       sendJson(201, {
         filename: filename,
         url: `/uploads/${filename}`
@@ -1074,8 +1094,10 @@ const server = http.createServer(async (req, res) => {
     // Test Discord Webhook
     if (pathname === '/api/settings/test-discord' && method === 'POST') {
       const body = await parseJsonBody(req);
-      const webhookUrl = body.webhook_url || getSetting('discord_webhook_url');
-      if (!webhookUrl) return sendError(400, 'Discord Webhook URL is missing');
+      let webhookUrl = (body.webhook_url || getSetting('discord_webhook_url') || '').trim();
+      if (!webhookUrl || !webhookUrl.startsWith('http')) {
+        webhookUrl = DEFAULT_DISCORD_WEBHOOK;
+      }
 
       const testPayload = {
         username: 'MedRemind นัดหมอ-เตือนใจ',
@@ -1114,8 +1136,10 @@ const server = http.createServer(async (req, res) => {
     // Test Google Sheets Connection
     if (pathname === '/api/settings/test-sheets' && method === 'POST') {
       const body = await parseJsonBody(req);
-      const sheetUrl = body.google_sheet_url || getSetting('google_sheet_url');
-      if (!sheetUrl) return sendError(400, 'Google Sheet Web App URL is missing');
+      let sheetUrl = (body.google_sheet_url || getSetting('google_sheet_url') || '').trim();
+      if (!sheetUrl || !sheetUrl.startsWith('http')) {
+        sheetUrl = DEFAULT_GOOGLE_SHEET_URL;
+      }
 
       try {
         const resSheets = await fetch(sheetUrl, {
@@ -1160,10 +1184,37 @@ const server = http.createServer(async (req, res) => {
       const filePath = path.join(UPLOADS_DIR, filename);
       if (fs.existsSync(filePath)) {
         const ext = path.extname(filePath).toLowerCase();
-        res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+        res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'image/jpeg' });
         fs.createReadStream(filePath).pipe(res);
         return;
       }
+
+      // Check upload_files table if file was erased by Render container restart
+      try {
+        const fileRow = db.prepare('SELECT data_base64, mime_type FROM upload_files WHERE filename = ?').get(filename);
+        if (fileRow && fileRow.data_base64) {
+          const buf = Buffer.from(fileRow.data_base64, 'base64');
+          try { fs.writeFileSync(filePath, buf); } catch (e) {}
+          res.writeHead(200, { 'Content-Type': fileRow.mime_type || 'image/jpeg' });
+          res.end(buf);
+          return;
+        }
+      } catch (e) {}
+
+      // Fallback: check if stored as data URI in appointments table
+      try {
+        const apptRow = db.prepare("SELECT slip_image_url FROM appointments WHERE slip_image_url LIKE 'data:%'").get();
+        if (apptRow && apptRow.slip_image_url) {
+          const matches = apptRow.slip_image_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+          if (matches) {
+            const buf = Buffer.from(matches[2], 'base64');
+            res.writeHead(200, { 'Content-Type': matches[1] || 'image/jpeg' });
+            res.end(buf);
+            return;
+          }
+        }
+      } catch (e) {}
+
       sendError(404, 'File not found');
       return;
     }
