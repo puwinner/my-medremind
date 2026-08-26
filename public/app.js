@@ -53,13 +53,13 @@ async function fetchProfiles() {
 function normalizeDateString(val) {
   if (!val) return '';
   val = String(val).trim();
-  const match = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-  if (match) {
-    const y = match[1];
-    const m = match[2].padStart(2, '0');
-    const d = match[3].padStart(2, '0');
-    return `${y}-${m}-${d}`;
+
+  // If already a clean YYYY-MM-DD string without time
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    return val;
   }
+
+  // If ISO string with T/Z (e.g. 2027-02-10T17:00:00.000Z), convert from UTC to Thai time (+7)
   const dt = new Date(val);
   if (!isNaN(dt.getTime())) {
     const tzOffset = 7 * 60 * 60 * 1000;
@@ -69,6 +69,15 @@ function normalizeDateString(val) {
     const d = String(thaiTime.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
   }
+
+  const match = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const y = match[1];
+    const m = match[2].padStart(2, '0');
+    const d = match[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
   return val;
 }
 
