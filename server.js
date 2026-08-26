@@ -751,23 +751,40 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // API ROUTE: /api/sync (Force synchronous refresh from Google Sheets)
+    if (pathname === '/api/sync' && method === 'POST') {
+      try {
+        const [sheetAppts, sheetProfiles] = await Promise.all([
+          callGoogleSheets('getAppointments'),
+          callGoogleSheets('getProfiles')
+        ]);
+        if (sheetProfiles && sheetProfiles.data && Array.isArray(sheetProfiles.data)) {
+          syncLocalProfiles(sheetProfiles.data);
+        }
+        if (sheetAppts && sheetAppts.data && Array.isArray(sheetAppts.data)) {
+          syncLocalAppointments(sheetAppts.data);
+        }
+        sendJson(200, { success: true, count: sheetAppts && sheetAppts.data ? sheetAppts.data.length : 0 });
+      } catch (e) {
+        sendError(500, 'Sync failed: ' + e.message);
+      }
+      return;
+    }
+
     // API ROUTE: /api/appointments
     if (pathname === '/api/appointments') {
       if (method === 'GET') {
         const profileId = parsedUrl.searchParams.get('profile_id');
         const status = parsedUrl.searchParams.get('status');
 
-        // Background sync with Google Sheets without blocking response
-        callGoogleSheets('getAppointments').then(sheetRes => {
-          if (sheetRes && sheetRes.success && Array.isArray(sheetRes.data)) {
-            syncLocalAppointments(sheetRes.data);
-          }
-        }).catch(() => {});
-
         let sql = `
-          SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
+          SELECT a.*, 
+                 COALESCE(p.name, 'ไม่ระบุ') as profile_name, 
+                 COALESCE(p.relation, 'ทั่วไป') as profile_relation, 
+                 COALESCE(p.color, '#3B82F6') as profile_color, 
+                 COALESCE(p.avatar, '👤') as profile_avatar
           FROM appointments a
-          JOIN profiles p ON a.profile_id = p.id
+          LEFT JOIN profiles p ON a.profile_id = p.id
           WHERE 1=1
         `;
         const params = [];
@@ -782,30 +799,35 @@ const server = http.createServer(async (req, res) => {
         }
 
         sql += ' ORDER BY a.appointment_date ASC, a.appointment_time ASC';
-        const rows = db.prepare(sql).all(...params);
+        let rows = db.prepare(sql).all(...params);
 
         if (rows.length > 0) {
+          // Send cached instantly and do background sync
+          callGoogleSheets('getAppointments').then(sheetRes => {
+            if (sheetRes && sheetRes.success && Array.isArray(sheetRes.data)) {
+              syncLocalAppointments(sheetRes.data);
+            }
+          }).catch(() => {});
+          
           sendJson(200, rows);
           return;
         }
 
-        // If local is empty, wait for Google Sheets
-        const sheetRes = await callGoogleSheets('getAppointments');
-        if (sheetRes && sheetRes.success && Array.isArray(sheetRes.data)) {
-          syncLocalAppointments(sheetRes.data);
-          let filtered = sheetRes.data;
-          if (profileId && profileId !== 'all') {
-            filtered = filtered.filter(a => a.profile_id === profileId);
+        // If local is completely empty (first start after cold sleep), wait for Google Sheets
+        try {
+          const [sheetAppts, sheetProfiles] = await Promise.all([
+            callGoogleSheets('getAppointments'),
+            callGoogleSheets('getProfiles')
+          ]);
+          if (sheetProfiles && sheetProfiles.data && Array.isArray(sheetProfiles.data)) {
+            syncLocalProfiles(sheetProfiles.data);
           }
-          if (status && status !== 'all') {
-            filtered = filtered.filter(a => a.status === status);
+          if (sheetAppts && sheetAppts.data && Array.isArray(sheetAppts.data)) {
+            syncLocalAppointments(sheetAppts.data);
           }
-          filtered.sort((a, b) => {
-            const d = (a.appointment_date || '').localeCompare(b.appointment_date || '');
-            return d !== 0 ? d : (a.appointment_time || '').localeCompare(b.appointment_time || '');
-          });
-          sendJson(200, filtered);
-          return;
+          rows = db.prepare(sql).all(...params);
+        } catch (e) {
+          console.error('Error fetching on cold start:', e);
         }
 
         sendJson(200, rows);
