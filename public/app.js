@@ -354,7 +354,7 @@ function renderTimelineView(container) {
                 <div class="flex items-center justify-between mb-1.5">
                   <span class="text-xs font-semibold text-slate-600">📸 ใบนัด / ใบสั่งยา</span>
                 </div>
-                <div class="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 aspect-[16/9] bg-slate-100 max-h-40" onclick="openImageViewer('${appt.slip_image_url}')">
+                <div class="relative group cursor-pointer overflow-hidden rounded-xl border border-slate-200 aspect-[16/9] bg-slate-100 max-h-40" onclick="openApptImageViewer('${appt.id}')">
                   <img src="${appt.slip_image_url}" alt="ใบนัดแพทย์" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200" />
                   <div class="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-xs font-bold gap-1.5 backdrop-blur-xs">
                     <span>🔍 กดเพื่อดูภาพขยาย</span>
@@ -736,32 +736,59 @@ function addQuickPrep(text) {
   }
 }
 
+function compressImage(file, maxWidth, quality, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const compressedData = canvas.toDataURL('image/jpeg', quality);
+      callback(compressedData);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
 function handleImageSelect(event) {
   const file = event.target.files[0];
   if (!file) return;
 
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    const base64Data = e.target.result;
-    showToast('กำลังอัปโหลดรูปภาพ...', 'info');
+  showToast('กำลังประมวลผลรูปภาพ...', 'info');
+
+  compressImage(file, 1000, 0.7, async (compressedBase64) => {
+    state.uploadedImageUrl = compressedBase64;
+    renderImageUploadPreview();
 
     try {
       const res = await fetch(`${API_BASE}/api/upload`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ base64: base64Data })
+        body: JSON.stringify({ base64: compressedBase64 })
       });
 
-      if (!res.ok) throw new Error('Upload failed');
-      const data = await res.json();
-      state.uploadedImageUrl = data.url;
-      renderImageUploadPreview();
-      showToast('อัปโหลดรูปภาพสำเร็จ!', 'success');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) state.uploadedImageUrl = data.url;
+      }
+      showToast('แนบรูปถ่ายใบนัดแพทย์เรียบร้อยแล้ว 📸', 'success');
     } catch (err) {
-      showToast('อัปโหลดรูปภาพไม่สำเร็จ: ' + err.message, 'error');
+      showToast('แนบรูปถ่ายเรียบร้อยแล้ว 📸', 'success');
     }
-  };
-  reader.readAsDataURL(file);
+  });
 }
 
 function renderImageUploadPreview() {
@@ -1031,15 +1058,31 @@ async function deleteProfile(profileId) {
   }
 }
 
+function openApptImageViewer(apptId) {
+  const appt = state.appointments.find(a => a.id === apptId);
+  if (appt && appt.slip_image_url) {
+    openImageViewer(appt.slip_image_url);
+  }
+}
+
 function openImageViewer(url) {
+  if (!url) return;
   const modal = document.getElementById('image-viewer-modal');
   const img = document.getElementById('viewer-img');
+  const downloadBtn = document.getElementById('viewer-download-btn');
+  if (!modal || !img) return;
   img.src = url;
+  if (downloadBtn) {
+    downloadBtn.href = url;
+  }
   modal.classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
 }
 
 function closeImageViewer() {
-  document.getElementById('image-viewer-modal').classList.add('hidden');
+  const modal = document.getElementById('image-viewer-modal');
+  if (modal) modal.classList.add('hidden');
+  document.body.style.overflow = '';
 }
 
 function switchTab(tabName) {

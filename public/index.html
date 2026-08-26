@@ -424,12 +424,20 @@
   <!-- ===================================================================== -->
   <!-- MODAL 4: Fullscreen Image Viewer Modal                               -->
   <!-- ===================================================================== -->
-  <div id="image-viewer-modal" class="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-md hidden" onclick="closeImageViewer()">
-    <div class="relative max-w-3xl max-h-[90vh] flex flex-col items-center" onclick="event.stopPropagation()">
-      <button onclick="closeImageViewer()" class="absolute -top-10 right-0 text-white text-2xl font-bold p-1 hover:text-slate-300">
-        ✕
-      </button>
-      <img id="viewer-img" src="" alt="ใบนัดแพทย์ขยายใหญ่" class="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl border border-white/20" />
+  <div id="image-viewer-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md hidden select-none" onclick="closeImageViewer()">
+    <button type="button" onclick="closeImageViewer()" class="fixed top-4 right-4 z-50 w-11 h-11 bg-white/20 hover:bg-white/30 active:bg-white/40 text-white rounded-full flex items-center justify-center text-2xl font-bold backdrop-blur-md shadow-xl transition-all" title="ปิด">
+      ✕
+    </button>
+    <div class="relative max-w-4xl max-h-[88vh] flex flex-col items-center justify-center" onclick="event.stopPropagation()">
+      <img id="viewer-img" src="" alt="ใบนัดแพทย์ขยายใหญ่" class="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl border border-white/20 transition-transform duration-200" />
+      <div class="flex items-center gap-3 mt-3">
+        <a id="viewer-download-btn" href="#" target="_blank" class="px-4 py-2 bg-white/20 hover:bg-white/30 text-white text-xs md:text-sm font-semibold rounded-xl backdrop-blur-md flex items-center gap-1.5 transition-all shadow-lg">
+          <span>🔍</span> เปิดดูภาพต้นฉบับ
+        </a>
+        <button type="button" onclick="closeImageViewer()" class="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs md:text-sm font-semibold rounded-xl backdrop-blur-md transition-all">
+          ปิดหน้าต่าง
+        </button>
+      </div>
     </div>
   </div>
 
@@ -454,6 +462,6 @@
       });
     }
   </script>
-  <script src="/app.js?v=8"></script>
+  <script src="/app.js?v=9"></script>
 </body>
 </html>
