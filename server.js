@@ -95,21 +95,35 @@ if (profileCount === 0) {
 const DEFAULT_DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1542036104612413520/m7gPpauvF7591fxV5uuG5BMx481lGD9sHAAYhXk7oax4ZMRKRFfQSxJOX9CsIgU7CsDx';
 const DEFAULT_GOOGLE_SHEET_URL = process.env.GOOGLE_SHEET_URL || 'https://script.google.com/macros/s/AKfycbxgpsu-yY1Saf_hXFHzFCumIRU_04_UirOR9wJQR3vUVYb0TzuULYTXJWY3HukUbQeMHg/exec';
 
-// Auto-seed settings if empty on boot
-if (!db.prepare("SELECT value FROM settings WHERE key = 'discord_webhook_url'").get()) {
-  db.prepare("INSERT INTO settings (key, value) VALUES ('discord_webhook_url', ?)").run(DEFAULT_DISCORD_WEBHOOK);
+// Auto-seed settings or overwrite invalid mock URLs on boot
+const currentWebhook = db.prepare("SELECT value FROM settings WHERE key = 'discord_webhook_url'").get();
+if (!currentWebhook || !currentWebhook.value || currentWebhook.value.includes('mock') || !currentWebhook.value.startsWith('https://discord.com/api/webhooks/')) {
+  setSetting('discord_webhook_url', DEFAULT_DISCORD_WEBHOOK);
 }
-if (!db.prepare("SELECT value FROM settings WHERE key = 'google_sheet_url'").get()) {
-  db.prepare("INSERT INTO settings (key, value) VALUES ('google_sheet_url', ?)").run(DEFAULT_GOOGLE_SHEET_URL);
+
+const currentSheet = db.prepare("SELECT value FROM settings WHERE key = 'google_sheet_url'").get();
+if (!currentSheet || !currentSheet.value || currentSheet.value.includes('mock') || !currentSheet.value.startsWith('https://script.google.com/macros/')) {
+  setSetting('google_sheet_url', DEFAULT_GOOGLE_SHEET_URL);
 }
 
 // Helper: Get Settings with built-in fallbacks
 function getSetting(key, defaultValue = '') {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  if (row && row.value && row.value.trim()) return row.value.trim();
-  if (key === 'discord_webhook_url') return DEFAULT_DISCORD_WEBHOOK;
-  if (key === 'google_sheet_url') return DEFAULT_GOOGLE_SHEET_URL;
-  return defaultValue;
+  const val = row && row.value ? row.value.trim() : '';
+  
+  if (key === 'discord_webhook_url') {
+    if (!val || val.includes('mock') || !val.startsWith('https://discord.com/api/webhooks/')) {
+      return DEFAULT_DISCORD_WEBHOOK;
+    }
+    return val;
+  }
+  if (key === 'google_sheet_url') {
+    if (!val || val.includes('mock') || !val.startsWith('https://script.google.com/macros/')) {
+      return DEFAULT_GOOGLE_SHEET_URL;
+    }
+    return val;
+  }
+  return val || defaultValue;
 }
 
 function setSetting(key, value) {
