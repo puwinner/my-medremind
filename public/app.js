@@ -777,10 +777,15 @@ async function handleAppointmentSubmit(event) {
       throw new Error(err.error || 'Save failed');
     }
 
+    const createdAppt = await res.json();
+    if (payload.notify_now && createdAppt && createdAppt.id) {
+      fetch(`${API_BASE}/api/appointments/${createdAppt.id}/notify`, { method: 'POST' }).catch(e => console.error(e));
+    }
+
     closeAppointmentModal();
     await fetchAppointments();
     renderAll();
-    showToast(state.editingAppointmentId ? 'แก้ไขนัดหมายเรียบร้อยแล้ว!' : 'เพิ่มนัดหมายใหม่สำเร็จแล้ว!', 'success');
+    showToast(state.editingAppointmentId ? 'แก้ไขนัดหมายเรียบร้อยแล้ว!' : (payload.notify_now ? 'เพิ่มนัดหมายและส่งแจ้งเตือนเข้า Discord แล้ว! 🚀' : 'เพิ่มนัดหมายใหม่สำเร็จแล้ว!'), 'success');
   } catch (err) {
     showToast('เกิดข้อผิดพลาด: ' + err.message, 'error');
   } finally {
