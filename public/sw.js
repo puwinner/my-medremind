@@ -1,5 +1,5 @@
 
-const CACHE_NAME = 'medremind-v2';
+const CACHE_NAME = 'medremind-v7';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

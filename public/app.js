@@ -50,6 +50,45 @@ async function fetchProfiles() {
   state.profiles = await res.json();
 }
 
+function normalizeDateString(val) {
+  if (!val) return '';
+  val = String(val).trim();
+  const match = val.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const y = match[1];
+    const m = match[2].padStart(2, '0');
+    const d = match[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  const dt = new Date(val);
+  if (!isNaN(dt.getTime())) {
+    const tzOffset = 7 * 60 * 60 * 1000;
+    const thaiTime = new Date(dt.getTime() + tzOffset);
+    const y = thaiTime.getUTCFullYear();
+    const m = String(thaiTime.getUTCMonth() + 1).padStart(2, '0');
+    const d = String(thaiTime.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return val;
+}
+
+function normalizeTimeString(val) {
+  if (!val) return '09:00';
+  val = String(val).trim();
+  if (/^\d{1,2}:\d{2}$/.test(val)) return val.padStart(5, '0');
+  if (/^\d{1,2}:\d{2}:\d{2}$/.test(val)) return val.substring(0, 5);
+  if (val.includes('T')) {
+    const dt = new Date(val);
+    if (!isNaN(dt.getTime())) {
+      const totalSec = dt.getUTCHours() * 3600 + dt.getUTCMinutes() * 60 + dt.getUTCSeconds() + (6 * 3600 + 42 * 60 + 4);
+      const h = Math.floor((totalSec / 3600) % 24);
+      const m = Math.round((totalSec % 3600) / 60);
+      return `${String(h).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+    }
+  }
+  return val;
+}
+
 async function fetchAppointments() {
   const query = new URLSearchParams();
   if (state.selectedProfileId && state.selectedProfileId !== 'all') {
@@ -61,7 +100,13 @@ async function fetchAppointments() {
 
   const res = await fetch(`${API_BASE}/api/appointments?${query.toString()}`);
   if (!res.ok) throw new Error('Cannot fetch appointments');
-  state.appointments = await res.json();
+  const rawList = await res.json();
+  state.appointments = rawList.map(a => {
+    return Object.assign({}, a, {
+      appointment_date: normalizeDateString(a.appointment_date),
+      appointment_time: normalizeTimeString(a.appointment_time)
+    });
+  });
 }
 
 async function fetchSettings() {
@@ -163,7 +208,7 @@ function renderStats() {
           <span class="text-xs px-2.5 py-0.5 rounded-full font-bold shadow-2xs ${rel.badgeClass}">${rel.text}</span>
         </div>
         <div class="text-xs md:text-sm text-slate-600 font-medium truncate">
-          👤 <strong>${escapeHtml(next.profile_name)}</strong> • 📅 ${formatThaiShortDate(next.appointment_date)} เวลา ${next.appointment_time || '-'} น. • ${escapeHtml(next.hospital)}
+          👤 <strong>${escapeHtml(next.profile_name)}</strong> • 📅 ${formatThaiShortDate(next.appointment_date)} เวลา ${formatApptTime(next.appointment_time)} น. • ${escapeHtml(next.hospital)}
         </div>
       `;
     } else {
@@ -262,7 +307,7 @@ function renderTimelineView(container) {
               <span>📅</span>
               <span>${thaiDateStr}</span>
               <span class="text-blue-400">•</span>
-              <span>เวลา ${appt.appointment_time || '-'} น.</span>
+              <span>เวลา ${formatApptTime(appt.appointment_time)} น.</span>
             </div>
           </div>
 
@@ -403,7 +448,7 @@ function renderCalendarView(container) {
         <div class="space-y-1 mt-1 overflow-hidden">
           ${dayAppts.map(a => `
             <div onclick="editAppointment('${a.id}')" title="${escapeHtml(a.title)} (${escapeHtml(a.profile_name)})" class="text-[10px] px-1 py-0.5 rounded font-medium text-white truncate cursor-pointer hover:opacity-90 transition-opacity" style="background-color: ${a.profile_color || '#3B82F6'};">
-              ${a.appointment_time ? a.appointment_time + ' ' : ''}${escapeHtml(a.title)}
+              ${a.appointment_time ? formatApptTime(a.appointment_time) + ' ' : ''}${escapeHtml(a.title)}
             </div>
           `).join('')}
         </div>
@@ -608,8 +653,8 @@ function openAppointmentModal(appointmentId = null) {
       document.getElementById('form-hospital').value = appt.hospital || '';
       document.getElementById('form-department').value = appt.department || '';
       document.getElementById('form-doctor').value = appt.doctor_name || '';
-      document.getElementById('form-date').value = appt.appointment_date;
-      document.getElementById('form-time').value = appt.appointment_time || '09:00';
+      document.getElementById('form-date').value = normalizeDateString(appt.appointment_date);
+      document.getElementById('form-time').value = normalizeTimeString(appt.appointment_time);
       document.getElementById('form-prep-notes').value = appt.prep_notes || '';
       document.getElementById('form-notes').value = appt.notes || '';
       state.uploadedImageUrl = appt.slip_image_url || null;
@@ -1001,10 +1046,26 @@ function switchTab(tabName) {
   renderMainView();
 }
 
+function parseApptDate(dateStr) {
+  const norm = normalizeDateString(dateStr);
+  if (!norm) return null;
+  const match = norm.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (match) {
+    const y = parseInt(match[1], 10);
+    const m = parseInt(match[2], 10);
+    const d = parseInt(match[3], 10);
+    return { year: y, month: m, day: d, dateObj: new Date(y, m - 1, d) };
+  }
+  return null;
+}
+
 function getRelativeDayInfo(dateStr) {
-  const today = new Date();
-  const todayDate = new Date(today.toISOString().split('T')[0] + 'T00:00:00');
-  const targetDate = new Date(dateStr + 'T00:00:00');
+  const parsed = parseApptDate(dateStr);
+  if (!parsed) return { text: 'ไม่ระบุวัน', badgeClass: 'bg-slate-100 text-slate-500' };
+
+  const now = new Date();
+  const todayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const targetDate = parsed.dateObj;
 
   const diffTime = targetDate.getTime() - todayDate.getTime();
   const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
@@ -1027,17 +1088,22 @@ function getRelativeDayInfo(dateStr) {
 }
 
 function formatThaiFullDate(dateStr) {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const dateObj = new Date(year, month - 1, day);
-  const dayName = THAI_DAYS_FULL[dateObj.getDay()];
-  const thaiYear = year + 543;
-  return `วัน${dayName}ที่ ${day} ${THAI_MONTHS_SHORT[month - 1]} ${thaiYear}`;
+  const parsed = parseApptDate(dateStr);
+  if (!parsed) return '-';
+  const dayName = THAI_DAYS_FULL[parsed.dateObj.getDay()] || '';
+  const thaiYear = parsed.year + 543;
+  return `วัน${dayName}ที่ ${parsed.day} ${THAI_MONTHS_SHORT[parsed.month - 1]} ${thaiYear}`;
 }
 
 function formatThaiShortDate(dateStr) {
-  const [year, month, day] = dateStr.split('-').map(Number);
-  const thaiYear = year + 543;
-  return `${day} ${THAI_MONTHS_SHORT[month - 1]} ${thaiYear}`;
+  const parsed = parseApptDate(dateStr);
+  if (!parsed) return '-';
+  const thaiYear = parsed.year + 543;
+  return `${parsed.day} ${THAI_MONTHS_SHORT[parsed.month - 1]} ${thaiYear}`;
+}
+
+function formatApptTime(timeStr) {
+  return normalizeTimeString(timeStr);
 }
 
 function escapeHtml(str) {
