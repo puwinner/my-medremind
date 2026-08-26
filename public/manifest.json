@@ -1,0 +1,16 @@
+{
+  "name": "MedRemind นัดหมอ-เตือนใจ",
+  "short_name": "MedRemind",
+  "description": "ระบบแจ้งเตือนนัดพบแพทย์และบันทึกสุขภาพครอบครัว",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/2966/2966327.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

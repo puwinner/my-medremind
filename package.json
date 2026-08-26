@@ -1,0 +1,21 @@
+﻿{
+  "name": "doctor-appointment-reminder",
+  "version": "1.0.0",
+  "description": "MedRemind - Doctor Appointment Reminder & Family Health Tracker",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "doctor-appointment",
+    "reminder",
+    "discord-webhook",
+    "google-calendar",
+    "pwa"
+  ],
+  "author": "",
+  "license": "MIT"
+}
