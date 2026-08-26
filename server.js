@@ -84,10 +84,25 @@ if (profileCount === 0) {
   insertProfile.run('p_mom', 'คุณแม่', 'คุณแม่', '#EC4899', '👩', now);
 }
 
-// Helper: Get Settings
+// Default permanent URLs (Used automatically when Render wakes from cold sleep)
+const DEFAULT_DISCORD_WEBHOOK = process.env.DISCORD_WEBHOOK_URL || 'https://discord.com/api/webhooks/1542036104612413520/m7gPpauvF7591fxV5uuG5BMx481lGD9sHAAYhXk7oax4ZMRKRFfQSxJOX9CsIgU7CsDx';
+const DEFAULT_GOOGLE_SHEET_URL = process.env.GOOGLE_SHEET_URL || 'https://script.google.com/macros/s/AKfycbxgpsu-yY1Saf_hXFHzFCumIRU_04_UirOR9wJQR3vUVYb0TzuULYTXJWY3HukUbQeMHg/exec';
+
+// Auto-seed settings if empty on boot
+if (!db.prepare("SELECT value FROM settings WHERE key = 'discord_webhook_url'").get()) {
+  db.prepare("INSERT INTO settings (key, value) VALUES ('discord_webhook_url', ?)").run(DEFAULT_DISCORD_WEBHOOK);
+}
+if (!db.prepare("SELECT value FROM settings WHERE key = 'google_sheet_url'").get()) {
+  db.prepare("INSERT INTO settings (key, value) VALUES ('google_sheet_url', ?)").run(DEFAULT_GOOGLE_SHEET_URL);
+}
+
+// Helper: Get Settings with built-in fallbacks
 function getSetting(key, defaultValue = '') {
   const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-  return row ? row.value : defaultValue;
+  if (row && row.value && row.value.trim()) return row.value.trim();
+  if (key === 'discord_webhook_url') return DEFAULT_DISCORD_WEBHOOK;
+  if (key === 'google_sheet_url') return DEFAULT_GOOGLE_SHEET_URL;
+  return defaultValue;
 }
 
 function setSetting(key, value) {
@@ -99,7 +114,7 @@ function setSetting(key, value) {
 
 // Helper: Call Google Sheets Web App Backend
 async function callGoogleSheets(action, payload = {}) {
-  const sheetUrl = getSetting('google_sheet_url') || process.env.GOOGLE_SHEET_URL;
+  const sheetUrl = getSetting('google_sheet_url');
   if (!sheetUrl || !sheetUrl.startsWith('http')) return null;
 
   try {
@@ -129,6 +144,22 @@ function syncLocalProfiles(profiles) {
     }
   } catch (e) {}
 }
+
+// Initial background sync from Google Sheets on server startup
+setTimeout(async () => {
+  try {
+    const sheetData = await callGoogleSheets('getAppointments');
+    if (sheetData && sheetData.data && Array.isArray(sheetData.data)) {
+      syncLocalAppointments(sheetData.data);
+    }
+    const profileData = await callGoogleSheets('getProfiles');
+    if (profileData && profileData.data && Array.isArray(profileData.data)) {
+      syncLocalProfiles(profileData.data);
+    }
+  } catch (e) {
+    console.error('Initial background sync error:', e);
+  }
+}, 1000);
 
 function normalizeApptDate(val) {
   if (!val) return '';
