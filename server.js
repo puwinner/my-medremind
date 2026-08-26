@@ -97,6 +97,67 @@ function setSetting(key, value) {
   `).run(key, String(value));
 }
 
+// Helper: Call Google Sheets Web App Backend
+async function callGoogleSheets(action, payload = {}) {
+  const sheetUrl = getSetting('google_sheet_url') || process.env.GOOGLE_SHEET_URL;
+  if (!sheetUrl || !sheetUrl.startsWith('http')) return null;
+
+  try {
+    const res = await fetch(sheetUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(Object.assign({ action: action }, payload)),
+      redirect: 'follow'
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (err) {
+    console.error('Google Sheets Error:', err.message);
+    return null;
+  }
+}
+
+// Sync Cache Helper
+function syncLocalProfiles(profiles) {
+  try {
+    for (const p of profiles) {
+      db.prepare(`
+        INSERT INTO profiles (id, name, relation, color, avatar, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET name = excluded.name, relation = excluded.relation, color = excluded.color, avatar = excluded.avatar
+      `).run(p.id, p.name, p.relation || 'ทั่วไป', p.color || '#3B82F6', p.avatar || '👤', p.created_at || new Date().toISOString());
+    }
+  } catch (e) {}
+}
+
+function syncLocalAppointments(appts) {
+  try {
+    for (const a of appts) {
+      db.prepare(`
+        INSERT INTO appointments (
+          id, profile_id, title, doctor_name, hospital, department,
+          appointment_date, appointment_time, prep_notes, prep_checklist,
+          slip_image_url, notes, status, reminded_7d, reminded_3d, reminded_1d, reminded_day_of, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          profile_id = excluded.profile_id, title = excluded.title, doctor_name = excluded.doctor_name,
+          hospital = excluded.hospital, department = excluded.department, appointment_date = excluded.appointment_date,
+          appointment_time = excluded.appointment_time, prep_notes = excluded.prep_notes, prep_checklist = excluded.prep_checklist,
+          slip_image_url = excluded.slip_image_url, notes = excluded.notes, status = excluded.status,
+          reminded_7d = excluded.reminded_7d, reminded_3d = excluded.reminded_3d, reminded_1d = excluded.reminded_1d,
+          reminded_day_of = excluded.reminded_day_of, updated_at = excluded.updated_at
+      `).run(
+        a.id, a.profile_id, a.title, a.doctor_name || '', a.hospital, a.department || '',
+        a.appointment_date, a.appointment_time || '09:00', a.prep_notes || '',
+        typeof a.prep_checklist === 'string' ? a.prep_checklist : JSON.stringify(a.prep_checklist || []),
+        a.slip_image_url || '', a.notes || '', a.status || 'upcoming',
+        Number(a.reminded_7d) || 0, Number(a.reminded_3d) || 0, Number(a.reminded_1d) || 0, Number(a.reminded_day_of) || 0,
+        a.created_at || new Date().toISOString(), a.updated_at || new Date().toISOString()
+      );
+    }
+  } catch (e) {}
+}
+
 // MIME Types for Static Files
 const MIME_TYPES = {
   '.html': 'text/html; charset=utf-8',
@@ -375,18 +436,27 @@ function generateGoogleCalendarUrl(appointment, profile) {
 }
 
 // Background Cron Scheduler (Runs every 60 seconds)
-function checkAndSendReminders() {
+async function checkAndSendReminders() {
   try {
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
     const nowHour = today.getHours();
 
-    const appointments = db.prepare(`
-      SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
-      FROM appointments a
-      JOIN profiles p ON a.profile_id = p.id
-      WHERE a.status = 'upcoming' AND a.appointment_date >= ?
-    `).all(todayStr);
+    let appointments = [];
+
+    // Check Google Sheets first
+    const sheetData = await callGoogleSheets('getAppointments');
+    if (sheetData && sheetData.success && Array.isArray(sheetData.data)) {
+      appointments = sheetData.data.filter(a => a.status === 'upcoming' && a.appointment_date >= todayStr);
+      syncLocalAppointments(sheetData.data);
+    } else {
+      appointments = db.prepare(`
+        SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
+        FROM appointments a
+        JOIN profiles p ON a.profile_id = p.id
+        WHERE a.status = 'upcoming' AND a.appointment_date >= ?
+      `).all(todayStr);
+    }
 
     for (const appt of appointments) {
       const profile = {
@@ -402,37 +472,41 @@ function checkAndSendReminders() {
       const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
       // 7 Days reminder
-      if (diffDays === 7 && !appt.reminded_7d) {
+      if (diffDays === 7 && !Number(appt.reminded_7d)) {
         sendDiscordNotification(appt, profile, '7d').then(res => {
           if (res.success) {
             db.prepare('UPDATE appointments SET reminded_7d = 1 WHERE id = ?').run(appt.id);
+            callGoogleSheets('updateAppointment', { appointment: Object.assign({}, appt, { reminded_7d: 1 }) });
           }
         });
       }
 
       // 3 Days reminder
-      if (diffDays === 3 && !appt.reminded_3d) {
+      if (diffDays === 3 && !Number(appt.reminded_3d)) {
         sendDiscordNotification(appt, profile, '3d').then(res => {
           if (res.success) {
             db.prepare('UPDATE appointments SET reminded_3d = 1 WHERE id = ?').run(appt.id);
+            callGoogleSheets('updateAppointment', { appointment: Object.assign({}, appt, { reminded_3d: 1 }) });
           }
         });
       }
 
       // 1 Day reminder (Tomorrow)
-      if (diffDays === 1 && !appt.reminded_1d) {
+      if (diffDays === 1 && !Number(appt.reminded_1d)) {
         sendDiscordNotification(appt, profile, '1d').then(res => {
           if (res.success) {
             db.prepare('UPDATE appointments SET reminded_1d = 1 WHERE id = ?').run(appt.id);
+            callGoogleSheets('updateAppointment', { appointment: Object.assign({}, appt, { reminded_1d: 1 }) });
           }
         });
       }
 
       // Day of appointment (Send once in the morning >= 7:00 AM)
-      if (diffDays === 0 && !appt.reminded_day_of && nowHour >= 7) {
+      if (diffDays === 0 && !Number(appt.reminded_day_of) && nowHour >= 7) {
         sendDiscordNotification(appt, profile, 'day_of').then(res => {
           if (res.success) {
             db.prepare('UPDATE appointments SET reminded_day_of = 1 WHERE id = ?').run(appt.id);
+            callGoogleSheets('updateAppointment', { appointment: Object.assign({}, appt, { reminded_day_of: 1 }) });
           }
         });
       }
@@ -503,6 +577,13 @@ const server = http.createServer(async (req, res) => {
     // API ROUTE: /api/profiles
     if (pathname === '/api/profiles') {
       if (method === 'GET') {
+        const sheetProfiles = await callGoogleSheets('getProfiles');
+        if (sheetProfiles && sheetProfiles.success && Array.isArray(sheetProfiles.data) && sheetProfiles.data.length > 0) {
+          syncLocalProfiles(sheetProfiles.data);
+          sendJson(200, sheetProfiles.data);
+          return;
+        }
+
         const rows = db.prepare('SELECT * FROM profiles ORDER BY created_at ASC').all();
         sendJson(200, rows);
         return;
@@ -513,11 +594,22 @@ const server = http.createServer(async (req, res) => {
         if (!body.name) return sendError(400, 'Name is required');
         const id = 'p_' + crypto.randomBytes(4).toString('hex');
         const now = new Date().toISOString();
+        const newProfile = {
+          id,
+          name: body.name,
+          relation: body.relation || 'ทั่วไป',
+          color: body.color || '#3B82F6',
+          avatar: body.avatar || '👤',
+          created_at: now
+        };
+
         db.prepare(`
           INSERT INTO profiles (id, name, relation, color, avatar, created_at)
           VALUES (?, ?, ?, ?, ?, ?)
-        `).run(id, body.name, body.relation || 'ทั่วไป', body.color || '#3B82F6', body.avatar || '👤', now);
-        
+        `).run(id, newProfile.name, newProfile.relation, newProfile.color, newProfile.avatar, now);
+
+        await callGoogleSheets('saveProfile', { profile: newProfile });
+
         const created = db.prepare('SELECT * FROM profiles WHERE id = ?').get(id);
         sendJson(201, created);
         return;
@@ -532,6 +624,11 @@ const server = http.createServer(async (req, res) => {
           UPDATE profiles SET name = ?, relation = ?, color = ?, avatar = ?
           WHERE id = ?
         `).run(body.name, body.relation, body.color, body.avatar, profileId);
+
+        await callGoogleSheets('saveProfile', {
+          profile: { id: profileId, name: body.name, relation: body.relation, color: body.color, avatar: body.avatar }
+        });
+
         const updated = db.prepare('SELECT * FROM profiles WHERE id = ?').get(profileId);
         sendJson(200, updated);
         return;
@@ -543,6 +640,7 @@ const server = http.createServer(async (req, res) => {
           return sendError(400, `ไม่สามารถลบโปรไฟล์นี้ได้เนื่องจากมี ${count} รายการนัดหมายผูกอยู่`);
         }
         db.prepare('DELETE FROM profiles WHERE id = ?').run(profileId);
+        await callGoogleSheets('deleteProfile', { id: profileId });
         sendJson(200, { success: true });
         return;
       }
@@ -553,6 +651,24 @@ const server = http.createServer(async (req, res) => {
       if (method === 'GET') {
         const profileId = parsedUrl.searchParams.get('profile_id');
         const status = parsedUrl.searchParams.get('status');
+
+        const sheetRes = await callGoogleSheets('getAppointments');
+        if (sheetRes && sheetRes.success && Array.isArray(sheetRes.data)) {
+          syncLocalAppointments(sheetRes.data);
+          let filtered = sheetRes.data;
+          if (profileId && profileId !== 'all') {
+            filtered = filtered.filter(a => a.profile_id === profileId);
+          }
+          if (status && status !== 'all') {
+            filtered = filtered.filter(a => a.status === status);
+          }
+          filtered.sort((a, b) => {
+            const d = (a.appointment_date || '').localeCompare(b.appointment_date || '');
+            return d !== 0 ? d : (a.appointment_time || '').localeCompare(b.appointment_time || '');
+          });
+          sendJson(200, filtered);
+          return;
+        }
 
         let sql = `
           SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
@@ -586,6 +702,24 @@ const server = http.createServer(async (req, res) => {
         const id = 'apt_' + crypto.randomBytes(6).toString('hex');
         const now = new Date().toISOString();
 
+        const newAppt = {
+          id,
+          profile_id: body.profile_id,
+          title: body.title,
+          doctor_name: body.doctor_name || '',
+          hospital: body.hospital,
+          department: body.department || '',
+          appointment_date: body.appointment_date,
+          appointment_time: body.appointment_time || '09:00',
+          prep_notes: body.prep_notes || '',
+          prep_checklist: body.prep_checklist ? (typeof body.prep_checklist === 'string' ? body.prep_checklist : JSON.stringify(body.prep_checklist)) : '[]',
+          slip_image_url: body.slip_image_url || '',
+          notes: body.notes || '',
+          status: body.status || 'upcoming',
+          created_at: now,
+          updated_at: now
+        };
+
         db.prepare(`
           INSERT INTO appointments (
             id, profile_id, title, doctor_name, hospital, department,
@@ -593,11 +727,12 @@ const server = http.createServer(async (req, res) => {
             slip_image_url, notes, status, created_at, updated_at
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-          id, body.profile_id, body.title, body.doctor_name || '', body.hospital, body.department || '',
-          body.appointment_date, body.appointment_time || '09:00', body.prep_notes || '',
-          body.prep_checklist ? (typeof body.prep_checklist === 'string' ? body.prep_checklist : JSON.stringify(body.prep_checklist)) : '[]',
-          body.slip_image_url || '', body.notes || '', body.status || 'upcoming', now, now
+          id, newAppt.profile_id, newAppt.title, newAppt.doctor_name, newAppt.hospital, newAppt.department,
+          newAppt.appointment_date, newAppt.appointment_time, newAppt.prep_notes,
+          newAppt.prep_checklist, newAppt.slip_image_url, newAppt.notes, newAppt.status, now, now
         );
+
+        await callGoogleSheets('saveAppointment', { appointment: newAppt });
 
         const created = db.prepare(`
           SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
@@ -669,14 +804,37 @@ const server = http.createServer(async (req, res) => {
 
       if (action === 'status' && method === 'PUT') {
         const body = await parseJsonBody(req);
+        const newStatus = body.status || 'completed';
         db.prepare('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?')
-          .run(body.status || 'completed', new Date().toISOString(), apptId);
+          .run(newStatus, new Date().toISOString(), apptId);
+
+        await callGoogleSheets('updateAppointment', {
+          appointment: Object.assign({}, existing, { status: newStatus })
+        });
+
         sendJson(200, { success: true });
         return;
       }
 
       if (method === 'PUT') {
         const body = await parseJsonBody(req);
+        const updatedAppt = {
+          id: apptId,
+          profile_id: body.profile_id,
+          title: body.title,
+          doctor_name: body.doctor_name || '',
+          hospital: body.hospital,
+          department: body.department || '',
+          appointment_date: body.appointment_date,
+          appointment_time: body.appointment_time || '09:00',
+          prep_notes: body.prep_notes || '',
+          prep_checklist: body.prep_checklist ? (typeof body.prep_checklist === 'string' ? body.prep_checklist : JSON.stringify(body.prep_checklist)) : '[]',
+          slip_image_url: body.slip_image_url || '',
+          notes: body.notes || '',
+          status: body.status || 'upcoming',
+          updated_at: new Date().toISOString()
+        };
+
         db.prepare(`
           UPDATE appointments SET
             profile_id = ?, title = ?, doctor_name = ?, hospital = ?, department = ?,
@@ -684,12 +842,13 @@ const server = http.createServer(async (req, res) => {
             slip_image_url = ?, notes = ?, status = ?, updated_at = ?
           WHERE id = ?
         `).run(
-          body.profile_id, body.title, body.doctor_name || '', body.hospital, body.department || '',
-          body.appointment_date, body.appointment_time || '09:00', body.prep_notes || '',
-          body.prep_checklist ? (typeof body.prep_checklist === 'string' ? body.prep_checklist : JSON.stringify(body.prep_checklist)) : '[]',
-          body.slip_image_url || '', body.notes || '', body.status || 'upcoming',
-          new Date().toISOString(), apptId
+          updatedAppt.profile_id, updatedAppt.title, updatedAppt.doctor_name, updatedAppt.hospital, updatedAppt.department,
+          updatedAppt.appointment_date, updatedAppt.appointment_time, updatedAppt.prep_notes,
+          updatedAppt.prep_checklist, updatedAppt.slip_image_url, updatedAppt.notes, updatedAppt.status,
+          updatedAppt.updated_at, apptId
         );
+
+        await callGoogleSheets('updateAppointment', { appointment: updatedAppt });
 
         const updated = db.prepare(`
           SELECT a.*, p.name as profile_name, p.relation as profile_relation, p.color as profile_color, p.avatar as profile_avatar
@@ -710,6 +869,7 @@ const server = http.createServer(async (req, res) => {
           }
         }
         db.prepare('DELETE FROM appointments WHERE id = ?').run(apptId);
+        await callGoogleSheets('deleteAppointment', { id: apptId });
         sendJson(200, { success: true });
         return;
       }
@@ -804,6 +964,36 @@ const server = http.createServer(async (req, res) => {
         }
 
         sendJson(200, { success: true, message: 'ส่งข้อความทดสอบเข้า Discord สำเร็จแล้ว!' });
+        return;
+      } catch (err) {
+        return sendError(500, `Network Error: ${err.message}`);
+      }
+    }
+
+    // Test Google Sheets Connection
+    if (pathname === '/api/settings/test-sheets' && method === 'POST') {
+      const body = await parseJsonBody(req);
+      const sheetUrl = body.google_sheet_url || getSetting('google_sheet_url');
+      if (!sheetUrl) return sendError(400, 'Google Sheet Web App URL is missing');
+
+      try {
+        const resSheets = await fetch(sheetUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'ping' }),
+          redirect: 'follow'
+        });
+
+        if (!resSheets.ok) {
+          return sendError(400, `Google Sheets HTTP Error: ${resSheets.status}`);
+        }
+
+        const data = await resSheets.json();
+        if (data.success) {
+          sendJson(200, { success: true, message: 'เชื่อมต่อ Google Sheets สำเร็จเรียบร้อยแล้ว!' });
+        } else {
+          sendJson(400, { success: false, error: data.error || 'Connection failed' });
+        }
         return;
       } catch (err) {
         return sendError(500, `Network Error: ${err.message}`);
